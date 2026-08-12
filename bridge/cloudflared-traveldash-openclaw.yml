@@ -1,0 +1,7 @@
+tunnel: 566625a1-b431-4c8e-9100-e58da1480699
+credentials-file: C:\Users\sac73\.cloudflared\566625a1-b431-4c8e-9100-e58da1480699.json
+
+ingress:
+  - hostname: openclaw.traveldash.pro
+    service: http://127.0.0.1:8787
+  - service: http_status:404
