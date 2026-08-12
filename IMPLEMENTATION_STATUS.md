@@ -1,6 +1,6 @@
 # TravelDash AI Chat Implementation Status
 
-Last updated: 2026-08-11 22:05 CDT.
+Last updated: 2026-08-12 14:01 CDT.
 
 ## Current Architecture
 
@@ -60,13 +60,27 @@ Required behavior:
    SSE streaming, and persisted assistant/user messages.
 12. Completed: Playwright production-mode local smoke test passed for login,
    `AI Chat` tab, sending a prompt, no page errors, and no body overflow.
-13. Remaining: deploy and commit completed feature.
+13. Completed: deployed production to Vercel and attached both
+    `traveldash.pro` and `www.traveldash.pro` to the current production
+    deployment.
+14. Completed: added a narrow local bridge at
+    `bridge/travel-agent-bridge.mjs` for `OPENCLAW_TRAVEL_AGENT_URL`.
+    The bridge only exposes `/health` and `/travel-agent`, requires
+    `OPENCLAW_TRAVEL_AGENT_TOKEN`, enforces travel-only scope, and calls the
+    local `local-main` model endpoint.
+15. Completed: started the bridge locally on `127.0.0.1:8787`, added a
+    `TravelDash-OpenClaw-Bridge` Windows Scheduled Task, started a Cloudflare
+    quick tunnel, set production Vercel env vars, and redeployed production.
+16. Remaining: replace the current Cloudflare quick tunnel with a named
+    account-backed tunnel for durable production uptime. The current quick
+    tunnel works now, but Cloudflare does not guarantee persistent URLs for
+    accountless quick tunnels.
 
 ## Continuation Notes
 
 - Keep credentials out of committed files.
 - Do not commit scratch scripts ignored by `.gitignore`.
-- Production travel-tool execution requires a web-callable
-  `OPENCLAW_TRAVEL_AGENT_URL`. Without that env var, the chat still streams and
-  stores history, but it will return a clear bridge-needed response after the
-  local-model fallback fails from Vercel.
+- Production travel-tool execution now uses `OPENCLAW_TRAVEL_AGENT_URL` and
+  `OPENCLAW_TRAVEL_AGENT_TOKEN` in Vercel production env.
+- The current bridge URL is backed by an accountless Cloudflare quick tunnel.
+  Treat it as live-but-temporary until a named Cloudflare tunnel is configured.

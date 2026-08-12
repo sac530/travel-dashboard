@@ -51,3 +51,4 @@ test.ps1
 supabase/.temp/
 tmp-*.log
 tmp-*.err.log
+tmp/
