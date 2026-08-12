@@ -24,6 +24,13 @@ This bridge is the narrow HTTP endpoint Vercel calls through
 The bridge calls the local model endpoint at `http://127.0.0.1:18080/v1` by
 default. Keep the Qwen local model task `OpenClaw-Qwen36-27B` running.
 
+For live travel-search requests, the bridge can run the local scraper at
+`D:\OpenClaw\TravelScraper`. It only routes known travel requests into fixed
+scraper commands, one destination or cruise port per request. Supported direct
+targets are Miami, San Francisco, Seattle, Boston, New York City, Paris,
+Dublin, Galveston cruises, and Miami cruises; broad deal requests use the
+scraper's deal-discovery command.
+
 ## Public Tunnel
 
 The current public path uses an accountless Cloudflare quick tunnel pointed at
