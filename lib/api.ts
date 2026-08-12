@@ -2,11 +2,12 @@ import { supabase, type Package, type Deal, type Extra, type ManualUpload, type 
 
 // ─── Packages ──────────────────────────────────────────────
 export async function getActivePackages() {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('packages')
     .select('*')
     .eq('status', 'active')
     .order('created_at', { ascending: false });
+  if (error) throw error;
   return (data || []) as Package[];
 }
 
@@ -28,7 +29,8 @@ export async function updatePackage(id: string, updates: Partial<Package>) {
 
 // ─── Deals ──────────────────────────────────────────────────
 export async function getDealsByPackage(packageId: string) {
-  const { data } = await supabase.from('deals').select('*').eq('package_id', packageId).order('deal_type');
+  const { data, error } = await supabase.from('deals').select('*').eq('package_id', packageId).order('deal_type');
+  if (error) throw error;
   return (data || []) as Deal[];
 }
 
@@ -39,7 +41,8 @@ export async function addDeal(deal: Omit<Deal, 'id' | 'created_at'>) {
 
 // ─── Extras ────────────────────────────────────────────────
 export async function getExtrasByPackage(packageId: string) {
-  const { data } = await supabase.from('extras').select('*').eq('package_id', packageId).order('category');
+  const { data, error } = await supabase.from('extras').select('*').eq('package_id', packageId).order('category');
+  if (error) throw error;
   return (data || []) as Extra[];
 }
 
@@ -55,7 +58,8 @@ export async function getUploadsByPackage(packageId: string) {
 }
 
 export async function addUpload(upload: Omit<ManualUpload, 'id' | 'created_at'>) {
-  const { data } = await supabase.from('manual_uploads').insert(upload).select().single();
+  const { data, error } = await supabase.from('manual_uploads').insert(upload).select().single();
+  if (error) throw error;
   return data as ManualUpload;
 }
 
@@ -68,7 +72,8 @@ export async function getIntakeSubmissions(status?: string) {
 }
 
 export async function createIntakeSubmission(submission: Omit<IntakeSubmission, 'id' | 'created_at'>) {
-  const { data } = await supabase.from('intake_submissions').insert(submission).select().single();
+  const { data, error } = await supabase.from('intake_submissions').insert(submission).select().single();
+  if (error) throw error;
   return data as IntakeSubmission;
 }
 

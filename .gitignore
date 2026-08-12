@@ -39,3 +39,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+.vercel
+.env*
+
+# local verification scratch files
+check-intake*.mjs
+check-pending.mjs
+query-intake.mjs
+test.ps1
+supabase/.temp/

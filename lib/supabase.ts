@@ -1,9 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseUrl = cleanEnv(process.env.NEXT_PUBLIC_SUPABASE_URL);
+const supabaseAnonKey = cleanEnv(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+function cleanEnv(value?: string) {
+  return (value || "").trim().replace(/^\uFEFF/, "").replace(/^['"]|['"]$/g, "");
+}
 
 // Types
 export interface Package {
@@ -11,8 +15,8 @@ export interface Package {
   title: string;
   destination: string;
   origin?: string | null;
-  start_date?: Date | null;
-  end_date?: Date | null;
+  start_date?: string | null;
+  end_date?: string | null;
   total_price?: number | null;
   status: 'active' | 'expired' | 'refresh_requested';
   created_at: string;
@@ -63,8 +67,8 @@ export interface IntakeSubmission {
   id: string;
   destination: string;
   origin?: string | null;
-  start_date?: Date | null;
-  end_date?: Date | null;
+  start_date?: string | null;
+  end_date?: string | null;
   flight_info?: string | null;
   hotel_info?: string | null;
   budget_max?: number | null;

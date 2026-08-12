@@ -11,7 +11,10 @@ html {
 
 body {
   font-family: var(--font-body);
-  background-color: #0c1222;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(14, 165, 233, 0.16), transparent 28rem),
+    radial-gradient(circle at 82% 8%, rgba(249, 115, 22, 0.12), transparent 26rem),
+    linear-gradient(145deg, #07111f 0%, #0d1828 48%, #17111c 100%);
   color: #e8edf5;
 }
 
@@ -21,7 +24,7 @@ body {
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 1rem;
+  border-radius: 0.5rem;
 }
 
 .glass-card-light {
@@ -29,7 +32,101 @@ body {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 0.75rem;
+  border-radius: 0.5rem;
+}
+
+.field-input {
+  width: 100%;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 0.75rem 1rem;
+  color: #fff;
+  outline: none;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.field-input::placeholder {
+  color: #64748b;
+}
+
+.field-input:focus {
+  border-color: rgba(125, 211, 252, 0.8);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.travel-shell {
+  background:
+    linear-gradient(180deg, rgba(7, 17, 31, 0.1) 0%, rgba(7, 17, 31, 0.86) 46%, #07111f 100%),
+    radial-gradient(circle at 72% 16%, rgba(249, 115, 22, 0.14), transparent 22rem),
+    radial-gradient(circle at 16% 18%, rgba(45, 212, 191, 0.12), transparent 24rem);
+}
+
+.destination-marquee {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+}
+
+.destination-track {
+  display: flex;
+  width: max-content;
+  gap: 1rem;
+  animation: destination-scroll 96s linear infinite;
+}
+
+.destination-marquee:hover .destination-track {
+  animation-play-state: paused;
+}
+
+.destination-tile {
+  position: relative;
+  height: 14rem;
+  width: 19rem;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: #111827;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+}
+
+.destination-tile-compact {
+  height: 10rem;
+  width: 15rem;
+}
+
+.destination-tile img {
+  height: 100%;
+  width: 100%;
+  object-fit: cover;
+  filter: saturate(1.08) contrast(1.04);
+}
+
+@keyframes destination-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(calc(-50% - 0.5rem)); }
+}
+
+@media (max-width: 640px) {
+  .destination-tile {
+    height: 11rem;
+    width: 15.5rem;
+  }
+
+  .destination-tile-compact {
+    height: 8.5rem;
+    width: 13rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .destination-track {
+    animation: none;
+  }
 }
 
 /* Gradient text */

@@ -1,348 +1,558 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ComponentType } from "react";
 import {
-  Plane, Hotel, Car, Calendar, DollarSign, Star,
-  Plus, AlertTriangle, RefreshCw, ExternalLink, FileText, Trash2, CheckCircle2, XCircle, Upload
+  AlertTriangle,
+  Calendar,
+  Car,
+  CheckCircle2,
+  DollarSign,
+  ExternalLink,
+  Hotel,
+  Plane,
+  Plus,
+  RefreshCw,
+  Star,
+  Trash2,
+  Upload,
 } from "lucide-react";
+import { getActivePackages, getDealsByPackage, getExtrasByPackage } from "@/lib/api";
+import type { Deal, Extra, Package } from "@/lib/supabase";
 
-// ─── Types ──────────────────────────────────────────────
-interface PackageItem {
-  id: string; title: string; destination: string; origin?: string | null;
-  start_date?: string | null; end_date?: string | null; total_price?: number | null;
-  status: "active" | "expired" | "refresh_requested"; created_at: string; expires_at: string; notes?: string | null; user_created: boolean;
-}
-
-interface DealItem {
-  id: string; package_id: string; deal_type: "flight" | "hotel" | "car" | "activity"; provider: string; title: string;
-  description?: string | null; price: number; original_price?: number | null; order_url?: string | null; rating?: number | null; created_at?: string;
-}
-
-interface ExtraItem {
-  id: string; package_id: string; category: string; name: string; description?: string | null;
-  estimated_price?: number | null; suggested_url?: string | null; purchased: boolean; created_at?: string;
-}
-
-// ─── Sample data (replace with Supabase) ──────────────
-const SAMPLE_PACKAGES: PackageItem[] = [
-  { id: "1", title: "Cancun All-Inclusive Escape", destination: "Cancún, Mexico", origin: "DFW", start_date: "2026-09-15", end_date: "2026-09-22", total_price: 1847, status: "active", created_at: new Date().toISOString(), expires_at: new Date(Date.now() + 5 * 86400000).toISOString(), notes: null, user_created: false },
-  { id: "2", title: "Paris Romantic Getaway", destination: "Paris, France", origin: "JFK", start_date: "2026-10-01", end_date: "2026-10-08", total_price: 2340, status: "active", created_at: new Date(Date.now() - 86400000).toISOString(), expires_at: new Date(Date.now() + 6 * 86400000).toISOString(), notes: null, user_created: false },
-  { id: "3", title: "Miami Beach Weekend", destination: "Miami, FL", origin: "ATL", start_date: "2026-08-22", end_date: "2026-08-24", total_price: 895, status: "active", created_at: new Date(Date.now() - 172800000).toISOString(), expires_at: new Date(Date.now() + 4 * 86400000).toISOString(), notes: null, user_created: false },
+const SAMPLE_PACKAGES: Package[] = [
+  {
+    id: "sample-cancun",
+    title: "Cancun All-Inclusive Escape",
+    destination: "Cancun, Mexico",
+    origin: "DFW",
+    start_date: "2026-09-15",
+    end_date: "2026-09-22",
+    total_price: 1847,
+    status: "active",
+    created_at: new Date().toISOString(),
+    expires_at: new Date(Date.now() + 5 * 86400000).toISOString(),
+    notes: "Sample package shown when Supabase has no active packages.",
+    user_created: false,
+  },
+  {
+    id: "sample-paris",
+    title: "Paris Rail + Boutique Hotel",
+    destination: "Paris, France",
+    origin: "JFK",
+    start_date: "2026-10-01",
+    end_date: "2026-10-08",
+    total_price: 2340,
+    status: "active",
+    created_at: new Date().toISOString(),
+    expires_at: new Date(Date.now() + 6 * 86400000).toISOString(),
+    notes: null,
+    user_created: false,
+  },
+  {
+    id: "sample-miami",
+    title: "Miami Beach Weekend",
+    destination: "Miami, FL",
+    origin: "ATL",
+    start_date: "2026-08-22",
+    end_date: "2026-08-24",
+    total_price: 895,
+    status: "active",
+    created_at: new Date().toISOString(),
+    expires_at: new Date(Date.now() + 2 * 86400000).toISOString(),
+    notes: null,
+    user_created: false,
+  },
 ];
 
-const SAMPLE_DEALS: DealItem[] = [
-  { id: "d1", package_id: "1", deal_type: "flight", provider: "United Airlines", title: "DFW → CUN Roundtrip", description: "Non-stop, economy plus, carry-on included", price: 347, original_price: 489, order_url: "#", rating: 4.2 },
-  { id: "d2", package_id: "1", deal_type: "hotel", provider: "Booking.com", title: "Hyatt Ziva Cancún — 5★ All Inclusive", description: "Ocean view suite, all meals & drinks included, beachfront pool", price: 1200, original_price: 1680, order_url: "#", rating: 4.7 },
-  { id: "d3", package_id: "1", deal_type: "car", provider: "Hertz", title: "Compact Car — Cancún Airport Pickup", description: "Nissan Versa or similar, full-to-full, unlimited mileage", price: 189, original_price: null, order_url: "#", rating: 4.0 },
+const SAMPLE_DEALS: Deal[] = [
+  {
+    id: "d1",
+    package_id: "sample-cancun",
+    deal_type: "flight",
+    provider: "United Airlines",
+    title: "DFW to CUN roundtrip",
+    description: "Nonstop, carry-on included, morning departure.",
+    price: 347,
+    original_price: 489,
+    order_url: "https://www.google.com/travel/flights",
+    rating: 4.2,
+    booking_details: {},
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: "d2",
+    package_id: "sample-cancun",
+    deal_type: "hotel",
+    provider: "Booking.com",
+    title: "Hyatt Ziva Cancun all-inclusive",
+    description: "Ocean view room, meals and drinks included, beachfront pool.",
+    price: 1200,
+    original_price: 1680,
+    order_url: "https://www.booking.com",
+    rating: 4.7,
+    booking_details: {},
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: "d3",
+    package_id: "sample-cancun",
+    deal_type: "car",
+    provider: "Hertz",
+    title: "Compact car at Cancun airport",
+    description: "Unlimited mileage, full-to-full fuel policy.",
+    price: 189,
+    original_price: null,
+    order_url: "https://www.hertz.com",
+    rating: 4,
+    booking_details: {},
+    created_at: new Date().toISOString(),
+  },
 ];
 
-const SAMPLE_EXTRAS: ExtraItem[] = [
-  { id: "e1", package_id: "1", category: "beach", name: "Snorkel Set (Mask + Fins)", description: "Quality silicone mask, tempered glass lens, quick-dry fins", estimated_price: 35, suggested_url: "#", purchased: false },
-  { id: "e2", package_id: "1", category: "beach", name: "Waterproof Phone Case", description: "IPX8 rated, works up to 30ft underwater", estimated_price: 15, suggested_url: "#", purchased: false },
-  { id: "e3", package_id: "1", category: "safety", name: "Travel Insurance — Trip Protection", description: "Covers trip cancellation, medical emergencies, baggage loss", estimated_price: 89, suggested_url: "#", purchased: false },
-  { id: "e4", package_id: "1", category: "misc", name: "Portable Power Bank (20000mAh)", description: "Charges phone 5x, fast charge, airline-safe capacity", estimated_price: 45, suggested_url: "#", purchased: true },
+const SAMPLE_EXTRAS: Extra[] = [
+  {
+    id: "e1",
+    package_id: "sample-cancun",
+    category: "beach",
+    name: "Reef-safe sunscreen",
+    description: "Good fit for beach trips and excursions.",
+    estimated_price: 18,
+    suggested_url: "https://www.amazon.com",
+    purchased: false,
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: "e2",
+    package_id: "sample-cancun",
+    category: "safety",
+    name: "Travel insurance",
+    description: "Trip cancellation, medical coverage, baggage delay.",
+    estimated_price: 89,
+    suggested_url: "https://www.squaremouth.com",
+    purchased: false,
+    created_at: new Date().toISOString(),
+  },
 ];
 
 const DEST_IMAGES = [
-  "https://images.unsplash.com/photo-1552074282-5e3f52949450?w=600&q=75",
-  "https://images.unsplash.com/photo-1502602898657-4e33ee1a1dfc?w=600&q=75",
-  "https://images.unsplash.com/photo-1535498730771-e735b95874cd?w=600&q=75",
+  "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=1000&q=80",
+  "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=1000&q=80",
+  "https://images.unsplash.com/photo-1506929562872-bb421503ef21?w=1000&q=80",
+  "https://images.unsplash.com/photo-1474044159687-1ee9f3a51722?w=1000&q=80",
+  "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?w=1000&q=80",
 ];
 
-// ─── Sub-components ─────────────────────────────────────
-function DaysRemaining({ expiresAt }: { expiresAt: string }) {
-  const diff = new Date(expiresAt).getTime() - Date.now();
-  const days = Math.ceil(diff / 86400000);
-  if (days <= 0) return <span className="text-red-400 font-semibold">Expired</span>;
-  if (days <= 3) return <span className="text-orange-400 font-semibold">{days}d left!</span>;
-  return <span className="text-green-400">{days}d left</span>;
-}
+const DESTINATION_IMAGE_MATCHES = [
+  { match: "cancun", image: "https://images.unsplash.com/photo-1510097467424-192d713fd8b2?w=1200&q=80" },
+  { match: "paris", image: "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=1200&q=80" },
+  { match: "miami", image: "https://images.unsplash.com/photo-1506929562872-bb421503ef21?w=1200&q=80" },
+  { match: "new york", image: "https://images.unsplash.com/photo-1485871981521-5b1fd3805eee?w=1200&q=80" },
+  { match: "tokyo", image: "https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=1200&q=80" },
+  { match: "dublin", image: "https://images.unsplash.com/photo-1549918864-48ac978761a4?w=1200&q=80" },
+  { match: "beach", image: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1200&q=80" },
+];
 
-function DealIcon({ type }: { type: string }) {
-  switch (type) {
-    case "flight": return <Plane className="w-5 h-5" />;
-    case "hotel": return <Hotel className="w-5 h-5" />;
-    case "car": return <Car className="w-5 h-5" />;
-    default: return <Star className="w-5 h-5" />;
-  }
-}
+const REFERENCE_NOW = Date.now();
 
-// ─── Main Component ─────────────────────────────────────
-export default function PackageGrid({ loading }: { loading?: boolean }) {
-  const [selectedPackage, setSelectedPackage] = useState<PackageItem | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
+type PackageDetails = { deals: Deal[]; extras: Extra[] };
 
-  const handleRefresh = () => setRefreshKey(p => p + 1);
+export default function PackageGrid({
+  loading,
+  onOpenIntake,
+}: {
+  loading?: boolean;
+  onOpenIntake: () => void;
+}) {
+  const [packages, setPackages] = useState<Package[]>([]);
+  const [details, setDetails] = useState<Record<string, PackageDetails>>({});
+  const [selectedPackage, setSelectedPackage] = useState<Package | null>(null);
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "sample" | "error">("loading");
+  const [error, setError] = useState("");
 
-  if (loading) {
+  const loadPackages = useCallback(async () => {
+    setLoadState("loading");
+    setError("");
+    try {
+      const active = await getActivePackages();
+      if (!active.length) {
+        setPackages(SAMPLE_PACKAGES);
+        setDetails({ "sample-cancun": { deals: SAMPLE_DEALS, extras: SAMPLE_EXTRAS } });
+        setLoadState("sample");
+        return;
+      }
+
+      const nextDetails: Record<string, PackageDetails> = {};
+      await Promise.all(
+        active.map(async (pkg) => {
+          const [deals, extras] = await Promise.all([getDealsByPackage(pkg.id), getExtrasByPackage(pkg.id)]);
+          nextDetails[pkg.id] = { deals, extras };
+        }),
+      );
+      setPackages(active);
+      setDetails(nextDetails);
+      setLoadState("ready");
+    } catch (err) {
+      setPackages(SAMPLE_PACKAGES);
+      setDetails({ "sample-cancun": { deals: SAMPLE_DEALS, extras: SAMPLE_EXTRAS } });
+      setLoadState("error");
+      setError(err instanceof Error ? err.message : "Could not load Supabase packages.");
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadPackages();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadPackages]);
+
+  const activeDetails = selectedPackage ? details[selectedPackage.id] || { deals: [], extras: [] } : null;
+
+  if (loading || loadState === "loading") {
     return (
-      <div className="space-y-8">
-        <div className="flex items-center justify-between mb-8">
+      <section className="space-y-6">
+        <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold text-white">Active Packages</h2>
-          <button onClick={handleRefresh} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-ocean-500/10 border border-ocean-500/20 text-ocean-300 hover:bg-ocean-500/20 transition-all">
-            <RefreshCw className="w-4 h-4" /> Refresh
-          </button>
+          <div className="h-10 w-28 rounded-lg bg-white/8" />
         </div>
-        {[1, 2, 3].map(i => (
-          <div key={i} className="glass-card animate-pulse p-6 h-[320px]" />
-        ))}
-      </div>
-    );
-  }
-
-  // ─── Package detail view ──────────────────────────────
-  if (selectedPackage) {
-    const pkg = selectedPackage;
-    const deals = SAMPLE_DEALS;
-    const extras = SAMPLE_EXTRAS;
-    const totalDealPrice = deals.reduce((s, d) => s + (d.price || 0), 0);
-
-    return (
-      <section>
-        {/* Back */}
-        <button onClick={() => setSelectedPackage(null)} className="flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition-colors">
-          ← Back to Packages
-        </button>
-
-        {/* Header card */}
-        <div className="glass-card p-8 shimmer-border relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-[400px] h-[200px] bg-gradient-to-bl from-ocean-500/10 to-transparent rounded-full blur-3xl pointer-events-none" />
-          <div className="relative flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-            <div>
-              <h2 className="text-3xl font-bold text-white mb-1">{pkg.title}</h2>
-              <p className="flex items-center gap-2 text-gray-400 flex-wrap">
-                <Plane className="w-4 h-4" /> {pkg.origin || "TBD"} → {pkg.destination}
-                <span className="mx-2 hidden sm:inline">•</span>
-                <Calendar className="w-4 h-4 inline" /> {pkg.start_date} to {pkg.end_date}
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <DaysRemaining expiresAt={pkg.expires_at} />
-              <button onClick={handleRefresh} className="p-2.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-colors" title="Request refresh">
-                <RefreshCw className="w-5 h-5 text-gray-400" />
-              </button>
-            </div>
-          </div>
-
-          {/* Summary */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {[
-              { icon: Plane, label: "Flights", count: deals.filter(d => d.deal_type === "flight").length },
-              { icon: Hotel, label: "Hotels", count: deals.filter(d => d.deal_type === "hotel").length },
-              { icon: Car, label: "Cars", count: deals.filter(d => d.deal_type === "car").length },
-              { icon: DollarSign, label: "Total", value: `$${totalDealPrice.toLocaleString()}` },
-            ].map(s => (
-              <div key={s.label} className="glass-card-light p-4 text-center">
-                <s.icon className="w-5 h-5 mx-auto mb-1 text-ocean-400" />
-                <p className="text-xs text-gray-500 uppercase tracking-wider">{s.label}</p>
-                <p className={`text-lg font-bold ${s.value ? "text-gradient" : "text-white"}`}>{s.value || s.count}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Deals */}
-        <div className="mt-8 space-y-6">
-          {["flight", "hotel", "car"].map(type => {
-            const typeDeals = deals.filter(d => d.deal_type === type);
-            if (typeDeals.length === 0) return null;
-            return (
-              <div key={type} className="glass-card p-6">
-                <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2 capitalize">
-                  <DealIcon type={type} /> {type}s
-                </h3>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  {typeDeals.map(deal => (
-                    <div key={deal.id} className={`p-5 rounded-xl border transition-all hover-lift ${deal.original_price ? "border-green-500/20 bg-green-500/5" : "border-white/10 bg-white/[0.03]"}`}>
-                      {deal.original_price && (
-                        <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-500/20 text-green-400 mb-2">
-                          Save ${Math.round(deal.original_price - deal.price)} ({Math.round((1 - deal.price / deal.original_price) * 100)}% off)
-                        </div>
-                      )}
-                      <h4 className="font-semibold text-white">{deal.title}</h4>
-                      {deal.provider && <p className="text-sm text-gray-500 mt-0.5">{deal.provider}</p>}
-                      {deal.description && <p className="text-sm text-gray-400 mt-2 leading-relaxed">{deal.description}</p>}
-                      <div className="mt-3 flex items-center justify-between flex-wrap gap-2">
-                        <div>
-                          {deal.original_price && (
-                            <span className="text-sm text-gray-500 line-through mr-2">${deal.original_price.toLocaleString()}</span>
-                          )}
-                          <span className="text-xl font-bold text-gradient">${deal.price.toLocaleString()}</span>
-                        </div>
-                        {deal.rating && (
-                          <div className="flex items-center gap-1">
-                            <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                            <span className="text-sm font-medium">{deal.rating}</span>
-                          </div>
-                        )}
-                        {deal.order_url && (
-                          <a href={deal.order_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 px-4 py-2 rounded-lg bg-ocean-500 hover:bg-ocean-600 text-white font-medium text-sm transition-colors">
-                            Book Now <ExternalLink className="w-3.5 h-3.5" />
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-
-          {/* Activities */}
-          {deals.filter(d => d.deal_type === "activity").length > 0 && (
-            <div className="glass-card p-6">
-              <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">🎯 Activities</h3>
-              {deals.filter(d => d.deal_type === "activity").map(deal => (
-                <div key={deal.id} className="p-5 rounded-xl border border-white/10 bg-white/[0.03] hover-lift transition-all">
-                  <h4 className="font-semibold text-white">{deal.title}</h4>
-                  {deal.description && <p className="text-sm text-gray-400 mt-2">{deal.description}</p>}
-                  <div className="mt-3 flex items-center justify-between">
-                    <span className="text-xl font-bold text-gradient">${deal.price.toLocaleString()}</span>
-                    {deal.order_url && (
-                      <a href={deal.order_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 px-4 py-2 rounded-lg bg-ocean-500 hover:bg-ocean-600 text-white font-medium text-sm transition-colors">
-                        Book Now <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Trip Essentials */}
-        <div className="mt-8 glass-card p-6">
-          <h3 className="text-xl font-bold text-white mb-1 flex items-center gap-2">🎒 Trip Essentials</h3>
-          <p className="text-sm text-gray-500 mb-4">Things you might need for this destination.</p>
-
-          {["beach", "safety", "misc"].map(cat => {
-            const catExtras = extras.filter(e => e.category === cat);
-            if (catExtras.length === 0) return null;
-            return (
-              <div key={cat} className="mb-6">
-                <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-500 mb-3">{cat}</h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {catExtras.map(extra => (
-                    <div key={extra.id} className={`flex items-start gap-3 p-4 rounded-xl border transition-all ${extra.purchased ? "border-green-500/20 bg-green-500/[0.05] opacity-60" : "border-white/10 bg-white/[0.03] hover-lift"}`}>
-                      <div className="flex-shrink-0 mt-0.5">
-                        {extra.purchased ? <CheckCircle2 className="w-5 h-5 text-green-400" /> : <XCircle className="w-5 h-5 text-gray-600 hover:text-gray-400 cursor-pointer transition-colors" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h5 className={`font-medium ${extra.purchased ? "line-through text-gray-500" : "text-white"}`}>{extra.name}</h5>
-                        <p className="text-sm text-gray-400 mt-0.5">{extra.description}</p>
-                      </div>
-                      {extra.estimated_price && (
-                        <span className={`font-semibold flex-shrink-0 ${extra.purchased ? "text-green-500" : "text-ocean-300"}`}>~${extra.estimated_price}</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-
-          <button className="mt-4 flex items-center gap-2 px-4 py-2 rounded-lg border border-dashed border-white/15 text-gray-500 hover:text-ocean-300 hover:border-ocean-500/30 transition-colors">
-            <Plus className="w-4 h-4" /> Add Custom Essential
-          </button>
-
-          {extras.some(e => !e.purchased) && (
-            <div className="mt-6 p-4 rounded-xl bg-sunset-500/10 border border-sunset-500/20">
-              <p className="text-sm text-gray-400">Not-yet-purchased essentials total:</p>
-              <p className="text-2xl font-bold text-gradient mt-1">~${extras.filter(e => !e.purchased).reduce((s, e) => s + (e.estimated_price || 0), 0)}</p>
-            </div>
-          )}
-        </div>
-
-        {/* Uploads */}
-        <div className="mt-8 glass-card p-6">
-          <h3 className="text-xl font-bold text-white mb-1 flex items-center gap-2">📎 Your Uploads & Notes</h3>
-          <p className="text-sm text-gray-500 mb-4">Screenshots, URLs, and notes for this package.</p>
-          <div className="flex items-center gap-3 p-4 rounded-xl border border-dashed border-white/10 text-gray-500 text-sm mb-4">
-            <FileText className="w-5 h-5 flex-shrink-0" /> No uploads yet for this package.
-          </div>
-          <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-ocean-500/10 border border-ocean-500/20 text-ocean-300 hover:bg-ocean-500/20 transition-colors">
-            <Upload className="w-4 h-4" /> Upload to This Package
-          </button>
-        </div>
-
-        {/* Stale notice */}
-        {(() => {
-          const daysLeft = Math.ceil((new Date(pkg.expires_at).getTime() - Date.now()) / 86400000);
-          if (daysLeft <= 3 && daysLeft > 0) {
-            return (
-              <div className="mt-6 p-5 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-start gap-3 pulse-glow">
-                <AlertTriangle className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-orange-300 font-semibold">Package expires in {daysLeft} days!</p>
-                  <p className="text-sm text-gray-400 mt-1">Would you like me to refresh this package with updated deals?</p>
-                </div>
-              </div>
-            );
-          }
-          return null;
-        })()}
-
-        {/* Actions */}
-        <div className="mt-8 flex flex-wrap gap-3 justify-end">
-          <button onClick={handleRefresh} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-ocean-500 hover:bg-ocean-600 text-white font-medium transition-colors shadow-lg shadow-ocean-500/20">
-            <RefreshCw className="w-4 h-4" /> Refresh Package
-          </button>
-          <button className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/5 hover:bg-red-500/10 border border-white/10 hover:border-red-500/30 text-gray-400 hover:text-red-400 transition-colors">
-            <Trash2 className="w-4 h-4" /> Delete Package
-          </button>
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {[1, 2, 3].map((item) => (
+            <div key={item} className="glass-card h-[330px] animate-pulse" />
+          ))}
         </div>
       </section>
     );
   }
 
-  // ─── Grid view ────────────────────────────────────────
+  if (selectedPackage && activeDetails) {
+    return (
+      <PackageDetail
+        pkg={selectedPackage}
+        deals={activeDetails.deals}
+        extras={activeDetails.extras}
+        onBack={() => setSelectedPackage(null)}
+        onRefresh={loadPackages}
+        onOpenIntake={onOpenIntake}
+      />
+    );
+  }
+
   return (
     <section>
-      <div className="flex items-center justify-between mb-8">
-        <h2 className="text-2xl font-bold text-white">Active Packages</h2>
-        <button onClick={handleRefresh} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-ocean-500/10 border border-ocean-500/20 text-ocean-300 hover:bg-ocean-500/20 transition-all">
-          <RefreshCw className="w-4 h-4" /> Refresh
-        </button>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-bold text-white">Active Packages</h2>
+          {loadState === "sample" && (
+            <p className="mt-1 text-sm text-amber-200">Showing sample cards because Supabase has no active packages yet.</p>
+          )}
+          {loadState === "error" && <p className="mt-1 text-sm text-rose-200">Supabase fallback active: {error}</p>}
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={loadPackages}
+            className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/6 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-sky-300/30 hover:text-sky-200"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Refresh
+          </button>
+          <button
+            type="button"
+            onClick={onOpenIntake}
+            className="flex items-center gap-2 rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-400"
+          >
+            <Plus className="h-4 w-4" />
+            Intake
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {SAMPLE_PACKAGES.map((pkg, idx) => (
-          <button key={pkg.id} onClick={() => setSelectedPackage(pkg)} className={`glass-card hover-lift text-left group cursor-pointer overflow-hidden shimmer-border`}>
-            <div className="h-44 bg-cover bg-center relative" style={{ backgroundImage: `url('${DEST_IMAGES[idx % DEST_IMAGES.length]}')` }}>
-              <div className="absolute inset-0 bg-gradient-to-t from-[#0c1222] via-transparent to-transparent" />
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {packages.map((pkg, index) => (
+          <button
+            key={pkg.id}
+            type="button"
+            onClick={() => setSelectedPackage(pkg)}
+            className="glass-card group overflow-hidden text-left shadow-2xl shadow-black/20 transition hover:-translate-y-1 hover:border-white/20"
+          >
+            <div className="relative h-52 overflow-hidden bg-slate-900">
+              <img
+                src={getDestinationImage(pkg, index)}
+                alt={`${pkg.destination} travel photo`}
+                className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#07111f]/90 via-[#07111f]/10 to-transparent" />
               <div className="absolute bottom-3 left-4 right-4">
-                <span className="text-xs text-white/70 font-medium px-2.5 py-1 rounded-full bg-black/40 backdrop-blur-sm">{pkg.origin} → {pkg.destination}</span>
+                <span className="rounded-full bg-black/50 px-3 py-1 text-xs font-medium text-white backdrop-blur">
+                  {pkg.origin || "TBD"} to {pkg.destination}
+                </span>
               </div>
             </div>
             <div className="p-5">
-              <h3 className="text-lg font-bold text-white mb-1 group-hover:text-ocean-300 transition-colors">{pkg.title}</h3>
-              <div className="flex items-center gap-2 text-sm text-gray-400 mt-2">
-                <Calendar className="w-4 h-4" /> {pkg.start_date} — {pkg.end_date}
+              <h3 className="min-h-[3.5rem] text-lg font-bold leading-7 text-white transition group-hover:text-sky-200">
+                {pkg.title}
+              </h3>
+              <div className="mt-2 flex items-center gap-2 text-sm text-slate-400">
+                <Calendar className="h-4 w-4" />
+                {formatDate(pkg.start_date)} - {formatDate(pkg.end_date)}
               </div>
-              <div className="mt-4 flex items-end justify-between">
+              <div className="mt-4 flex items-end justify-between gap-3">
                 <div>
-                  <span className="text-xs text-gray-500 uppercase tracking-wider">Total</span>
-                  <p className="text-2xl font-bold text-gradient">${pkg.total_price?.toLocaleString()}</p>
+                  <span className="text-xs uppercase tracking-wide text-slate-500">Package total</span>
+                  <p className="text-2xl font-bold text-gradient">{formatMoney(pkg.total_price)}</p>
                 </div>
-                <DaysRemaining expiresAt={pkg.expires_at} />
+                <DaysRemaining expiresAt={pkg.expires_at} now={REFERENCE_NOW} />
               </div>
-              <div className="mt-4 flex gap-2">
-                <span className="text-xs px-2.5 py-1 rounded-full bg-ocean-500/15 text-ocean-300 border border-ocean-500/20">✈ Flight</span>
-                <span className="text-xs px-2.5 py-1 rounded-full bg-sunset-500/15 text-sunset-400 border border-sunset-500/20">🏨 Hotel</span>
-                <span className="text-xs px-2.5 py-1 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/20">🚗 Car</span>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Badge icon={Plane} label="Flight" />
+                <Badge icon={Hotel} label="Hotel" />
+                <Badge icon={Car} label="Car" />
               </div>
             </div>
           </button>
         ))}
       </div>
-
-      {SAMPLE_PACKAGES.length === 0 && (
-        <div className="text-center py-20">
-          <Plane className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-          <h3 className="text-xl font-semibold text-gray-400 mb-2">No active packages yet</h3>
-          <p className="text-gray-500 max-w-md mx-auto">Packages auto-generate from our travel scrapers. Fill out the Intake Form to kick one off now.</p>
-        </div>
-      )}
     </section>
   );
+}
+
+function PackageDetail({
+  pkg,
+  deals,
+  extras,
+  onBack,
+  onRefresh,
+  onOpenIntake,
+}: {
+  pkg: Package;
+  deals: Deal[];
+  extras: Extra[];
+  onBack: () => void;
+  onRefresh: () => void;
+  onOpenIntake: () => void;
+}) {
+  const totalDealPrice = useMemo(() => deals.reduce((sum, deal) => sum + Number(deal.price || 0), 0), [deals]);
+  const daysLeft = getDaysRemaining(pkg.expires_at, REFERENCE_NOW);
+  const dealTypes = ["flight", "hotel", "car", "activity"] as const;
+
+  return (
+    <section>
+      <button type="button" onClick={onBack} className="mb-6 text-sm font-medium text-slate-400 transition hover:text-white">
+        Back to packages
+      </button>
+
+      <div className="glass-card overflow-hidden shadow-2xl shadow-black/20">
+        <div className="relative h-64 overflow-hidden">
+          <img src={getDestinationImage(pkg, 0)} alt={`${pkg.destination} travel photo`} className="h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#07111f]/82 via-transparent to-transparent" />
+          <div className="absolute bottom-4 left-5 rounded-full bg-black/48 px-3 py-1 text-sm font-medium text-white backdrop-blur">
+            {pkg.destination}
+          </div>
+        </div>
+        <div className="p-6 sm:p-8">
+          <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
+            <div>
+              <h2 className="text-3xl font-bold text-white">{pkg.title}</h2>
+              <p className="mt-2 flex flex-wrap items-center gap-2 text-slate-400">
+                <Plane className="h-4 w-4" />
+                {pkg.origin || "TBD"} to {pkg.destination}
+                <span className="hidden sm:inline">|</span>
+                <Calendar className="h-4 w-4" />
+                {formatDate(pkg.start_date)} - {formatDate(pkg.end_date)}
+              </p>
+              {pkg.notes && <p className="mt-3 max-w-2xl text-sm text-slate-400">{pkg.notes}</p>}
+            </div>
+            <div className="flex items-center gap-3">
+              <DaysRemaining expiresAt={pkg.expires_at} now={REFERENCE_NOW} />
+              <button
+                type="button"
+                onClick={onRefresh}
+                className="rounded-lg border border-white/10 bg-white/6 p-2.5 text-slate-300 transition hover:text-sky-200"
+                title="Refresh package data"
+              >
+                <RefreshCw className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Metric icon={Plane} label="Flights" value={String(deals.filter((deal) => deal.deal_type === "flight").length)} />
+            <Metric icon={Hotel} label="Hotels" value={String(deals.filter((deal) => deal.deal_type === "hotel").length)} />
+            <Metric icon={Car} label="Cars" value={String(deals.filter((deal) => deal.deal_type === "car").length)} />
+            <Metric icon={DollarSign} label="Deals Total" value={formatMoney(totalDealPrice || pkg.total_price)} />
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-8 space-y-6">
+        {dealTypes.map((type) => {
+          const typeDeals = deals.filter((deal) => deal.deal_type === type);
+          if (!typeDeals.length) return null;
+          return (
+            <div key={type} className="glass-card p-6">
+              <h3 className="mb-4 flex items-center gap-2 text-xl font-bold capitalize text-white">
+                <DealIcon type={type} />
+                {type}s
+              </h3>
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                {typeDeals.map((deal) => (
+                  <DealCard key={deal.id} deal={deal} />
+                ))}
+              </div>
+            </div>
+          );
+        })}
+
+        {!deals.length && (
+          <div className="glass-card p-6 text-slate-400">
+            No deals are attached yet. Use intake or uploads so the processor has source material.
+          </div>
+        )}
+      </div>
+
+      <div className="mt-8 glass-card p-6">
+        <h3 className="mb-1 text-xl font-bold text-white">Trip Essentials</h3>
+        <p className="mb-4 text-sm text-slate-500">Destination-specific items and purchase reminders.</p>
+        {extras.length ? (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {extras.map((extra) => (
+              <div key={extra.id} className="rounded-lg border border-white/10 bg-white/5 p-4">
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className={`mt-0.5 h-5 w-5 ${extra.purchased ? "text-emerald-300" : "text-slate-600"}`} />
+                  <div className="min-w-0 flex-1">
+                    <h4 className="font-semibold text-white">{extra.name}</h4>
+                    {extra.description && <p className="mt-1 text-sm text-slate-400">{extra.description}</p>}
+                    <p className="mt-2 text-sm font-medium text-sky-200">{formatMoney(extra.estimated_price)}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="rounded-lg border border-dashed border-white/10 p-4 text-sm text-slate-500">
+            No essentials yet. The processor should add beach, safety, transport, and misc items when it builds the package.
+          </p>
+        )}
+      </div>
+
+      {daysLeft <= 3 && daysLeft > 0 && (
+        <div className="mt-6 flex items-start gap-3 rounded-lg border border-orange-400/20 bg-orange-400/10 p-5 text-orange-100">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+          <div>
+            <p className="font-semibold">This package expires in {daysLeft} days.</p>
+            <p className="mt-1 text-sm text-orange-100/80">Refresh it before booking so prices and availability are current.</p>
+          </div>
+        </div>
+      )}
+
+      <div className="mt-8 flex flex-wrap justify-end gap-3">
+        <button
+          type="button"
+          onClick={onOpenIntake}
+          className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/6 px-5 py-2.5 font-medium text-slate-200 transition hover:text-sky-200"
+        >
+          <Upload className="h-4 w-4" />
+          Add Source
+        </button>
+        <button type="button" className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/6 px-5 py-2.5 font-medium text-slate-400">
+          <Trash2 className="h-4 w-4" />
+          Delete
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function DealCard({ deal }: { deal: Deal }) {
+  const savings = deal.original_price ? Number(deal.original_price) - Number(deal.price) : 0;
+  return (
+    <div className="rounded-lg border border-white/10 bg-white/5 p-5 shadow-lg shadow-black/10 transition hover:border-white/20">
+      {savings > 0 && (
+        <div className="mb-2 inline-flex rounded-full bg-emerald-400/10 px-2.5 py-1 text-xs font-semibold text-emerald-200">
+          Save {formatMoney(savings)}
+        </div>
+      )}
+      <h4 className="font-semibold text-white">{deal.title}</h4>
+      <p className="mt-1 text-sm text-slate-500">{deal.provider}</p>
+      {deal.description && <p className="mt-3 text-sm leading-6 text-slate-400">{deal.description}</p>}
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          {deal.original_price && <span className="mr-2 text-sm text-slate-500 line-through">{formatMoney(deal.original_price)}</span>}
+          <span className="text-xl font-bold text-gradient">{formatMoney(deal.price)}</span>
+        </div>
+        {deal.rating && (
+          <span className="flex items-center gap-1 text-sm text-amber-200">
+            <Star className="h-4 w-4 fill-amber-300 text-amber-300" />
+            {deal.rating}
+          </span>
+        )}
+        {deal.order_url && (
+          <a
+            href={deal.order_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 rounded-md bg-sky-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-sky-400"
+          >
+            Open
+            <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DaysRemaining({ expiresAt, now }: { expiresAt: string; now: number }) {
+  const days = getDaysRemaining(expiresAt, now);
+  if (days <= 0) return <span className="rounded-full bg-rose-400/10 px-3 py-1 text-sm font-semibold text-rose-200">Expired</span>;
+  if (days <= 3) return <span className="rounded-full bg-orange-400/10 px-3 py-1 text-sm font-semibold text-orange-200">{days}d left</span>;
+  return <span className="rounded-full bg-emerald-400/10 px-3 py-1 text-sm font-semibold text-emerald-200">{days}d left</span>;
+}
+
+function getDaysRemaining(expiresAt: string, now: number) {
+  return Math.ceil((new Date(expiresAt).getTime() - now) / 86400000);
+}
+
+function DealIcon({ type }: { type: Deal["deal_type"] }) {
+  if (type === "flight") return <Plane className="h-5 w-5 text-sky-300" />;
+  if (type === "hotel") return <Hotel className="h-5 w-5 text-orange-300" />;
+  if (type === "car") return <Car className="h-5 w-5 text-emerald-300" />;
+  return <Star className="h-5 w-5 text-violet-300" />;
+}
+
+function Metric({ icon: Icon, label, value }: { icon: ComponentType<{ className?: string }>; label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-white/10 bg-white/5 p-4 text-center">
+      <Icon className="mx-auto mb-2 h-5 w-5 text-sky-300" />
+      <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-1 text-lg font-bold text-white">{value}</p>
+    </div>
+  );
+}
+
+function Badge({ icon: Icon, label }: { icon: ComponentType<{ className?: string }>; label: string }) {
+  return (
+    <span className="flex items-center gap-1 rounded-full border border-white/10 bg-white/6 px-2.5 py-1 text-xs text-slate-300">
+      <Icon className="h-3.5 w-3.5 text-sky-300" />
+      {label}
+    </span>
+  );
+}
+
+function getDestinationImage(pkg: Package, index: number) {
+  const haystack = `${pkg.destination || ""} ${pkg.title || ""}`.toLowerCase();
+  const match = DESTINATION_IMAGE_MATCHES.find((item) => haystack.includes(item.match));
+  return match?.image || DEST_IMAGES[index % DEST_IMAGES.length];
+}
+
+function formatMoney(value?: number | string | null) {
+  const numeric = Number(value || 0);
+  if (!numeric) return "TBD";
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(numeric);
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return "TBD";
+  return new Date(`${value}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }

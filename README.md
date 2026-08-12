@@ -1,4 +1,22 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TravelDash
+
+Private travel package dashboard for intake requests, package cards, manual deal uploads, and scraper/local-LLM processing.
+
+## Login
+
+The front page uses Supabase email/password auth plus a signed HTTP-only app
+session cookie. Users must be marked with `travel_dash_access = true` in
+Supabase auth app metadata before they can open the dashboard.
+
+Set these env vars in Vercel for production:
+
+```bash
+TRAVEL_DASHBOARD_SESSION_SECRET=...
+```
+
+## Local LLM Notes
+
+See `LOCAL_LLM_HANDOFF.md` for concise maintenance notes intended for a smaller local model.
 
 ## Getting Started
 

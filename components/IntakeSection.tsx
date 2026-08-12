@@ -1,10 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import { Plane, MapPin, Calendar, DollarSign, Send } from "lucide-react";
+import { FormEvent, useState } from "react";
+import type { ReactNode } from "react";
+import { Calendar, DollarSign, MapPin, Plane, Send } from "lucide-react";
+import { createIntakeSubmission } from "@/lib/api";
 
 export default function IntakeSection() {
-  const [submitted, setSubmitted] = useState(false);
+  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [error, setError] = useState("");
   const [form, setForm] = useState({
     destination: "",
     origin: "",
@@ -16,148 +19,178 @@ export default function IntakeSection() {
     notes: "",
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitted(true);
-    // In production, this would POST to the API → intake_submissions table
-    setTimeout(() => setSubmitted(false), 4000);
-  };
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setStatus("saving");
+    setError("");
+
+    try {
+      await createIntakeSubmission({
+        destination: form.destination.trim(),
+        origin: form.origin.trim() || null,
+        start_date: form.startDate || null,
+        end_date: form.endDate || null,
+        flight_info: form.flightInfo.trim() || null,
+        hotel_info: form.hotelInfo.trim() || null,
+        budget_max: form.budgetMax ? Number(form.budgetMax) : null,
+        notes: form.notes.trim() || null,
+        status: "pending",
+      });
+      setStatus("saved");
+      setForm({
+        destination: "",
+        origin: "",
+        startDate: "",
+        endDate: "",
+        flightInfo: "",
+        hotelInfo: "",
+        budgetMax: "",
+        notes: "",
+      });
+    } catch (err) {
+      setStatus("error");
+      setError(err instanceof Error ? err.message : "Could not save the intake request.");
+    }
+  }
 
   return (
     <section>
-      <div className="mb-10">
-        <h2 className="text-3xl font-bold text-white mb-2">Find a Deal? Start a Package</h2>
-        <p className="text-gray-400 max-w-xl">
-          Found flights or hotels at great prices? Tell us what you found and I'll build 
-          out the rest — hotel, car rental, activities, even beach gear.
+      <div className="mb-8">
+        <div className="mb-3 flex items-center gap-2 text-sm font-medium text-sky-300">
+          <MapPin className="h-4 w-4" />
+          Intake queue
+        </div>
+        <h2 className="text-3xl font-bold text-white">Start a Travel Package</h2>
+        <p className="mt-3 max-w-xl text-slate-400">
+          Add enough detail for the scraper or a local LLM to turn this into flights,
+          hotels, cars, activities, and essentials.
         </p>
       </div>
 
-      {submitted && (
-        <div className="mb-8 p-5 rounded-xl bg-green-500/10 border border-green-500/20 text-center">
-          <p className="text-green-300 font-semibold text-lg">✓ Submission received!</p>
-          <p className="text-sm text-gray-400 mt-1">I'll build a package around your findings. Check back in a few minutes.</p>
+      {status === "saved" && (
+        <div className="mb-6 rounded-lg border border-emerald-400/20 bg-emerald-400/10 p-4 text-emerald-200">
+          Submission saved as pending. The intake checker can pick it up from Supabase.
+        </div>
+      )}
+      {status === "error" && (
+        <div className="mb-6 rounded-lg border border-rose-400/20 bg-rose-400/10 p-4 text-rose-200">
+          {error}
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="glass-card p-8 space-y-6">
-        {/* Trip Details */}
-        <div>
-          <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-            🗺️ Trip Details
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-400 mb-1.5">Destination *</label>
-              <input
-                type="text"
-                required
-                placeholder="e.g., Cancún, Mexico"
-                value={form.destination}
-                onChange={(e) => setForm({ ...form, destination: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-600 focus:border-ocean-500 focus:outline-none focus:ring-1 focus:ring-ocean-500 transition-all"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-400 mb-1.5">Origin (where you fly from)</label>
-              <input
-                type="text"
-                placeholder="e.g., DFW"
-                value={form.origin}
-                onChange={(e) => setForm({ ...form, origin: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-600 focus:border-ocean-500 focus:outline-none transition-all"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-400 mb-1.5">Start Date</label>
-              <input
-                type="date"
-                value={form.startDate}
-                onChange={(e) => setForm({ ...form, startDate: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white focus:border-ocean-500 focus:outline-none transition-all"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-400 mb-1.5">End Date</label>
-              <input
-                type="date"
-                value={form.endDate}
-                onChange={(e) => setForm({ ...form, endDate: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white focus:border-ocean-500 focus:outline-none transition-all"
-              />
-            </div>
-          </div>
+      <form onSubmit={handleSubmit} className="glass-card space-y-6 p-6 sm:p-8">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Destination" required>
+            <input
+              required
+              placeholder="Cancun, Mexico"
+              value={form.destination}
+              onChange={(event) => setForm({ ...form, destination: event.target.value })}
+              className="field-input"
+            />
+          </Field>
+          <Field label="Origin">
+            <input
+              placeholder="DFW"
+              value={form.origin}
+              onChange={(event) => setForm({ ...form, origin: event.target.value.toUpperCase() })}
+              className="field-input"
+            />
+          </Field>
+          <Field label="Start Date" icon={<Calendar className="h-4 w-4" />}>
+            <input
+              type="date"
+              value={form.startDate}
+              onChange={(event) => setForm({ ...form, startDate: event.target.value })}
+              className="field-input"
+            />
+          </Field>
+          <Field label="End Date" icon={<Calendar className="h-4 w-4" />}>
+            <input
+              type="date"
+              value={form.endDate}
+              onChange={(event) => setForm({ ...form, endDate: event.target.value })}
+              className="field-input"
+            />
+          </Field>
         </div>
 
-        {/* What you found */}
-        <div>
-          <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-            ✈️ What You Found
-          </h3>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-400 mb-1.5">Flight Details</label>
-              <textarea
-                rows={3}
-                placeholder='e.g., Found United DFW→CUN for $289 roundtrip Aug 15-22, non-stop'
-                value={form.flightInfo}
-                onChange={(e) => setForm({ ...form, flightInfo: e.target.value })}
-                className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-600 focus:border-ocean-500 focus:outline-none transition-all resize-vertical"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-400 mb-1.5">Hotel Details</label>
-              <textarea
-                rows={3}
-                placeholder='e.g., Hyatt Ziva Cancún $1,400/night all-inclusive for 7 nights'
-                value={form.hotelInfo}
-                onChange={(e) => setForm({ ...form, hotelInfo: e.target.value })}
-                className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-600 focus:border-ocean-500 focus:outline-none transition-all resize-vertical"
-              />
-            </div>
-          </div>
-        </div>
+        <Field label="Flight Details" icon={<Plane className="h-4 w-4" />}>
+          <textarea
+            rows={3}
+            placeholder="Example: United DFW to CUN for $289 roundtrip, nonstop, Aug 15-22."
+            value={form.flightInfo}
+            onChange={(event) => setForm({ ...form, flightInfo: event.target.value })}
+            className="field-input resize-y"
+          />
+        </Field>
 
-        {/* Budget & Notes */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-400 mb-1.5">Total Budget (max)</label>
-            <div className="relative">
-              <DollarSign className="absolute left-3 top-3 w-5 h-5 text-gray-600" />
-              <input
-                type="number"
-                placeholder="5000"
-                value={form.budgetMax}
-                onChange={(e) => setForm({ ...form, budgetMax: e.target.value })}
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-600 focus:border-ocean-500 focus:outline-none transition-all"
-              />
-            </div>
-          </div>
+        <Field label="Hotel Details">
+          <textarea
+            rows={3}
+            placeholder="Example: Hyatt Ziva Cancun all-inclusive, ocean view, $1,400 total."
+            value={form.hotelInfo}
+            onChange={(event) => setForm({ ...form, hotelInfo: event.target.value })}
+            className="field-input resize-y"
+          />
+        </Field>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_auto]">
+          <Field label="Total Budget" icon={<DollarSign className="h-4 w-4" />}>
+            <input
+              type="number"
+              min="0"
+              placeholder="2500"
+              value={form.budgetMax}
+              onChange={(event) => setForm({ ...form, budgetMax: event.target.value })}
+              className="field-input"
+            />
+          </Field>
           <div className="flex items-end">
             <button
               type="submit"
-              className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-ocean-500 to-sunset-500 hover:from-ocean-400 hover:to-sunset-400 text-white font-semibold transition-all shadow-lg shadow-ocean-500/20"
+              disabled={status === "saving"}
+              className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-sky-500 px-6 font-semibold text-white transition hover:bg-sky-400 disabled:cursor-wait disabled:opacity-70 sm:w-auto"
             >
-              <Send className="w-4 h-4" /> Build Package
+              <Send className="h-4 w-4" />
+              {status === "saving" ? "Saving..." : "Build Package"}
             </button>
           </div>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-400 mb-1.5">Additional Notes</label>
+        <Field label="Additional Notes">
           <textarea
-            rows={2}
-            placeholder="Any preferences? Beach vs city? Luxury or budget?"
+            rows={3}
+            placeholder="Preferences, flexibility, must-haves, passport notes, luggage, activities, or deal links."
             value={form.notes}
-            onChange={(e) => setForm({ ...form, notes: e.target.value })}
-            className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-600 focus:border-ocean-500 focus:outline-none transition-all resize-vertical"
+            onChange={(event) => setForm({ ...form, notes: event.target.value })}
+            className="field-input resize-y"
           />
-        </div>
+        </Field>
       </form>
-
-      <p className="text-center text-xs text-gray-600 mt-4">
-        Submissions are processed automatically. I'll search for flights, hotels, cars and build a complete package around your findings.
-      </p>
     </section>
+  );
+}
+
+function Field({
+  label,
+  required,
+  icon,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  icon?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-300">
+        {icon}
+        {label}
+        {required ? <span className="text-sky-300">*</span> : null}
+      </span>
+      {children}
+    </label>
   );
 }
