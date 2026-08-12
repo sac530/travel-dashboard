@@ -7,8 +7,9 @@ import PackageGrid from "@/components/PackageGrid";
 import IntakeSection from "@/components/IntakeSection";
 import UploadSection from "@/components/UploadSection";
 import StatsBar from "@/components/StatsBar";
+import TravelChat from "@/components/TravelChat";
 
-export type ActiveTab = "packages" | "intake" | "upload";
+export type ActiveTab = "packages" | "intake" | "upload" | "chat";
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("packages");
@@ -60,6 +61,12 @@ export default function Dashboard() {
         {activeTab === "upload" && (
           <main className="mx-auto max-w-3xl px-4 py-10 sm:px-6 lg:px-8">
             <UploadSection />
+          </main>
+        )}
+
+        {activeTab === "chat" && (
+          <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+            <TravelChat />
           </main>
         )}
 

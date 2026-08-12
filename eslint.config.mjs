@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    "check-intake*.mjs",
+    "check-pending.mjs",
+    "query-intake.mjs",
+    "test.ps1",
   ]),
 ]);
 

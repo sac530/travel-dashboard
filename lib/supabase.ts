@@ -76,3 +76,21 @@ export interface IntakeSubmission {
   status: 'pending' | 'processing' | 'completed' | 'archived';
   created_at: string;
 }
+
+export interface TravelChatConversation {
+  id: string;
+  owner_email: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TravelChatMessage {
+  id: string;
+  conversation_id: string;
+  owner_email: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  structured?: Record<string, unknown> | null;
+  created_at: string;
+}

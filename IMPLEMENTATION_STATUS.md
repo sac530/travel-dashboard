@@ -1,6 +1,6 @@
 # TravelDash AI Chat Implementation Status
 
-Last updated: 2026-08-11 21:45 CDT.
+Last updated: 2026-08-11 22:05 CDT.
 
 ## Current Architecture
 
@@ -38,27 +38,35 @@ Required behavior:
 
 ## Planned Implementation
 
-1. Commit current working redesign/auth baseline before major changes.
-2. Add Supabase chat schema for conversations/messages.
-3. Add server-side auth helpers that expose the current user email from the
-   signed session token.
-4. Add `app/api/chat/*` routes:
-   - list/create conversations
-   - fetch messages
-   - stream assistant responses over SSE
-5. Add a restricted OpenClaw travel-agent adapter:
+1. Completed: committed current working redesign/auth baseline before major
+   changes in Git commit `37b6fb1`.
+2. Completed: added Supabase chat schema for conversations/messages.
+3. Completed: added server-side auth helpers that expose the current user email
+   from the signed session token.
+4. Completed: added `app/api/chat/*` routes for conversation list/create,
+   message fetch, and assistant response streaming over SSE.
+5. Completed: added a restricted OpenClaw travel-agent adapter:
    - default to configured `OPENCLAW_TRAVEL_AGENT_URL` when present
    - otherwise use the local OpenAI-compatible main model endpoint for
      reasoning-only travel responses
    - enforce travel-only input/output guardrails server-side
-6. Add `components/TravelChat.tsx` and a `Chat` navbar tab.
-7. Render structured result cards in the chat transcript.
-8. Run build/lint, local UI smoke tests, deploy, and commit completed feature.
+6. Completed: added `components/TravelChat.tsx` and an `AI Chat` navbar tab.
+7. Completed: structured result cards render in the chat transcript.
+8. Completed: remote Supabase tables were applied with
+   `supabase db query --linked --file ...travel_chat.sql`.
+9. Completed: `npm run build` passes.
+10. Completed: `npm run lint` passes with existing warnings only.
+11. Completed: local API smoke test passed for login, chat conversation access,
+   SSE streaming, and persisted assistant/user messages.
+12. Completed: Playwright production-mode local smoke test passed for login,
+   `AI Chat` tab, sending a prompt, no page errors, and no body overflow.
+13. Remaining: deploy and commit completed feature.
 
 ## Continuation Notes
 
 - Keep credentials out of committed files.
 - Do not commit scratch scripts ignored by `.gitignore`.
-- If OpenClaw does not expose a web-callable bridge yet, ship the app with the
-  `OPENCLAW_TRAVEL_AGENT_URL` adapter and local model fallback, then configure
-  the bridge as a production env var.
+- Production travel-tool execution requires a web-callable
+  `OPENCLAW_TRAVEL_AGENT_URL`. Without that env var, the chat still streams and
+  stores history, but it will return a clear bridge-needed response after the
+  local-model fallback fails from Vercel.
