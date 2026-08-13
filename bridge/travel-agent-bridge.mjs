@@ -12,6 +12,7 @@ const MODEL = process.env.LOCAL_MAIN_MODEL || "local-main";
 const MODEL_API_KEY = process.env.LOCAL_MAIN_MODEL_API_KEY || "llama-local";
 const TRAVEL_SCRAPER_DIR = process.env.TRAVEL_SCRAPER_DIR || "D:\\OpenClaw\\TravelScraper";
 const TRAVEL_SCRAPER_RESULTS_DIR = process.env.TRAVEL_SCRAPER_RESULTS_DIR || path.join(TRAVEL_SCRAPER_DIR, "results");
+const CAMOUFOX_PY = process.env.CAMOUFOX_PY || "D:\\OpenClaw\\CamouFox\\.venv\\Scripts\\python.exe";
 const SCRAPER_TIMEOUT_MS = Number(process.env.TRAVEL_SCRAPER_TIMEOUT_MS || 240_000);
 const execFileAsync = promisify(execFile);
 
@@ -153,6 +154,7 @@ async function callLocalModel({ userMessage, history, scrapePlan, scrapeResult }
             "You are TravelDash AI, a private travel planning agent.",
             "Only answer travel tasks: hotels, flights, destinations, restaurants, attractions, weather, itineraries, trip research, comparisons, recommendations, and travel package updates.",
             "Do not perform shell, admin, system, config, credential, or unrelated OpenClaw tasks.",
+            "For city flight and hotel requests, Google Flights and Google Hotels are the first check. Kayak is only the second check/fallback.",
             "When live scraper results are provided, use them as the primary source. Mention that prices and availability can change before booking.",
             "If a request mentions multiple destinations, explain that TravelDash runs one destination at a time and only summarize the destination that was scraped.",
             "Return strict JSON only with shape: {\"answer\":\"...\",\"cards\":[{\"type\":\"hotel|flight|deal|restaurant|attraction|weather|itinerary\",\"title\":\"...\",\"subtitle\":\"...\",\"imageUrl\":\"\",\"price\":\"\",\"rating\":\"\",\"details\":\"...\",\"provider\":\"...\",\"url\":\"https://...\",\"actionLabel\":\"View Deal\"}]}",
@@ -178,13 +180,14 @@ async function callLocalModel({ userMessage, history, scrapePlan, scrapeResult }
 }
 
 const CITY_ALIASES = [
-  { match: /\b(miami|mia)\b/i, command: "city", value: "Miami", label: "Miami" },
-  { match: /\b(san francisco|sfo|sf)\b/i, command: "city", value: "San Francisco", label: "San Francisco" },
-  { match: /\b(seattle|sea)\b/i, command: "city", value: "Seattle", label: "Seattle" },
-  { match: /\b(boston|bos)\b/i, command: "city", value: "Boston", label: "Boston" },
-  { match: /\b(new york city|new york|nyc|jfk|lga|ewr)\b/i, command: "city", value: "New York", label: "New York City" },
-  { match: /\b(paris|cdg)\b/i, command: "city", value: "Paris", label: "Paris" },
-  { match: /\b(dublin|dub)\b/i, command: "city", value: "Dublin", label: "Dublin" },
+  { match: /\b(miami|mia)\b/i, command: "city", value: "Miami", label: "Miami", airport: "MIA" },
+  { match: /\b(san francisco|sfo|sf)\b/i, command: "city", value: "San Francisco", label: "San Francisco", airport: "SFO" },
+  { match: /\b(seattle|sea)\b/i, command: "city", value: "Seattle", label: "Seattle", airport: "SEA" },
+  { match: /\b(boston|bos)\b/i, command: "city", value: "Boston", label: "Boston", airport: "BOS" },
+  { match: /\b(new york city|new york|nyc|jfk|lga|ewr)\b/i, command: "city", value: "New York", label: "New York City", airport: "JFK" },
+  { match: /\b(portland|pdx)\b/i, command: "city", value: "Portland", label: "Portland", airport: "PDX" },
+  { match: /\b(paris|cdg)\b/i, command: "city", value: "Paris", label: "Paris", airport: "CDG" },
+  { match: /\b(dublin|dub)\b/i, command: "city", value: "Dublin", label: "Dublin", airport: "DUB" },
 ];
 
 const CRUISE_PORT_ALIASES = [
@@ -203,7 +206,20 @@ function planScrape(userMessage) {
   }
 
   const city = CITY_ALIASES.find((item) => item.match.test(userMessage));
-  if (city) return { kind: "city", label: city.label, args: [city.command, city.value] };
+  if (city) {
+    const dates = inferTripDates(userMessage);
+    return {
+      kind: "google-city",
+      label: city.label,
+      args: [city.command, city.value],
+      city: city.value,
+      airport: city.airport,
+      origin: inferOrigin(userMessage),
+      depart: dates.depart,
+      returnDate: dates.returnDate,
+      fallbackArgs: [city.command, city.value],
+    };
+  }
 
   if (/\b(deal|cheap|search|scrape|flight|hotel|cruise|package)\b/i.test(userMessage)) {
     return {
@@ -225,6 +241,87 @@ function sanitizeDealQuery(value) {
 }
 
 async function runScraper(plan) {
+  if (plan.kind === "google-city") {
+    const googleResult = await runGoogleTrip(plan).catch((error) => ({
+      command: `${CAMOUFOX_PY} src\\scrape_google_trip.py --city ${plan.city} --airport ${plan.airport}`,
+      label: `${plan.label} Google Flights/Hotels`,
+      savedPath: undefined,
+      stdoutTail: "",
+      stderrTail: "",
+      error: error instanceof Error ? error.message : "Google trip scraper failed",
+      resultJson: null,
+    }));
+
+    if (hasUsableGoogleTrip(googleResult.resultJson)) return googleResult;
+
+    const kayakResult = await runNodeScraper({
+      ...plan,
+      kind: "city",
+      label: `${plan.label} Kayak fallback`,
+      args: plan.fallbackArgs,
+    }).catch((error) => ({
+      command: `node src\\index.js ${plan.fallbackArgs.join(" ")}`,
+      label: `${plan.label} Kayak fallback`,
+      savedPath: googleResult.savedPath,
+      stdoutTail: googleResult.stdoutTail,
+      stderrTail: googleResult.stderrTail,
+      error: `Google first check did not return usable flight/hotel rows; Kayak fallback failed: ${
+        error instanceof Error ? error.message : "Scraper failed"
+      }`,
+      resultJson: googleResult.resultJson,
+    }));
+
+    return {
+      ...kayakResult,
+      googleFirst: {
+        command: googleResult.command,
+        resultFile: googleResult.savedPath,
+        error: googleResult.error,
+      },
+    };
+  }
+
+  return runNodeScraper(plan);
+}
+
+async function runGoogleTrip(plan) {
+  const startedAt = Date.now();
+  const command = CAMOUFOX_PY;
+  const args = [
+    "src\\scrape_google_trip.py",
+    "--origin",
+    plan.origin,
+    "--city",
+    plan.city,
+    "--airport",
+    plan.airport,
+    "--depart",
+    plan.depart,
+    "--return",
+    plan.returnDate,
+  ];
+  const { stdout, stderr } = await execFileAsync(command, args, {
+    cwd: TRAVEL_SCRAPER_DIR,
+    timeout: SCRAPER_TIMEOUT_MS,
+    windowsHide: true,
+    maxBuffer: 4 * 1024 * 1024,
+  });
+
+  const parsedStdout = parseJsonish(stdout);
+  const savedPath = parsedStdout?.output || await findSavedResultPath({ stdout, startedAt });
+  const resultJson = savedPath ? await readJsonFile(savedPath).catch(() => null) : null;
+
+  return {
+    command: `${command} ${args.join(" ")}`,
+    label: `${plan.label} Google Flights/Hotels`,
+    savedPath,
+    stdoutTail: tail(stdout, 3000),
+    stderrTail: tail(stderr, 1200),
+    resultJson,
+  };
+}
+
+async function runNodeScraper(plan) {
   const startedAt = Date.now();
   const command = "node";
   const args = ["src\\index.js", ...plan.args];
@@ -246,6 +343,14 @@ async function runScraper(plan) {
     stderrTail: tail(stderr, 1200),
     resultJson,
   };
+}
+
+function hasUsableGoogleTrip(value) {
+  return value?.source === "google_trip" &&
+    Array.isArray(value?.flight?.deals) &&
+    value.flight.deals.length > 0 &&
+    Array.isArray(value?.hotel?.hotels) &&
+    value.hotel.hotels.length > 0;
 }
 
 async function findSavedResultPath({ stdout, startedAt }) {
@@ -285,6 +390,7 @@ function buildLiveScrapeContext({ scrapePlan, scrapeResult }) {
       command: scrapeResult.command,
       resultFile: scrapeResult.savedPath,
       error: scrapeResult.error,
+      googleFirst: scrapeResult.googleFirst,
       stderr: scrapeResult.stderrTail,
       results: compactResults,
     }),
@@ -292,6 +398,43 @@ function buildLiveScrapeContext({ scrapePlan, scrapeResult }) {
 }
 
 function compactScrapeJson(value) {
+  if (value?.source === "google_trip") {
+    return [
+      {
+        site: "google",
+        type: "flight",
+        label: `${value.origin || "DFW"} to ${value.airport || value.city}`,
+        title: value.flight?.title,
+        url: value.flight?.url,
+        deals: Array.isArray(value.flight?.deals)
+          ? value.flight.deals.slice(0, 8).map((deal) => ({
+              title: `${deal.airline || "Flight"} ${deal.nonstop ? "nonstop" : `${deal.stops ?? "unknown"} stop`}`,
+              price: deal.price,
+              provider: "Google Flights",
+              details: trimText(deal.snippet, 500),
+              url: value.flight?.url,
+            }))
+          : [],
+      },
+      {
+        site: "google",
+        type: "hotel",
+        label: `${value.city} hotels`,
+        title: value.hotel?.title,
+        url: value.hotel?.url,
+        deals: Array.isArray(value.hotel?.hotels)
+          ? value.hotel.hotels.slice(0, 8).map((hotel) => ({
+              title: hotel.name,
+              price: hotel.price_per_night,
+              provider: "Google Hotels",
+              details: `$${hotel.price_per_night}/night before final checkout taxes and fees.`,
+              url: value.hotel?.url,
+            }))
+          : [],
+      },
+    ];
+  }
+
   const items = Array.isArray(value) ? value : Array.isArray(value?.results) ? value.results : [];
   return items.slice(0, 8).map((item) => ({
     site: item?.site,
@@ -371,6 +514,47 @@ function tail(value, maxChars) {
 function trimText(value, maxChars) {
   const text = typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
   return text.length > maxChars ? `${text.slice(0, maxChars - 3)}...` : text;
+}
+
+function inferOrigin(input) {
+  const match = input.match(/\bfrom\s+([A-Z]{3})\b/i);
+  return match ? match[1].toUpperCase() : "DFW";
+}
+
+function inferTripDates(input) {
+  const explicitDates = [...input.matchAll(/\b(20\d{2}-\d{2}-\d{2})\b/g)].map((match) => match[1]);
+  if (explicitDates.length >= 2) return { depart: explicitDates[0], returnDate: explicitDates[1] };
+  if (explicitDates.length === 1) return { depart: explicitDates[0], returnDate: addDaysIso(explicitDates[0], 3) };
+
+  const monthMatch = input.match(/\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\b/i);
+  if (monthMatch) {
+    const now = new Date();
+    const month = monthNumber(monthMatch[1]);
+    let year = now.getFullYear();
+    if (month < now.getMonth()) year += 1;
+    const depart = firstThursdayIso(year, month);
+    return { depart, returnDate: addDaysIso(depart, 3) };
+  }
+
+  const fallbackDepart = addDaysIso(new Date().toISOString().slice(0, 10), 28);
+  return { depart: fallbackDepart, returnDate: addDaysIso(fallbackDepart, 3) };
+}
+
+function monthNumber(value) {
+  const key = value.toLowerCase().slice(0, 3);
+  return ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"].indexOf(key);
+}
+
+function firstThursdayIso(year, monthIndex) {
+  const date = new Date(Date.UTC(year, monthIndex, 1));
+  while (date.getUTCDay() !== 4) date.setUTCDate(date.getUTCDate() + 1);
+  return date.toISOString().slice(0, 10);
+}
+
+function addDaysIso(isoDate, days) {
+  const date = new Date(`${isoDate}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
 function readJson(request) {
