@@ -282,6 +282,8 @@ function planScrape(userMessage) {
       origin: city.origin || inferOrigin(userMessage),
       depart: dates.depart,
       returnDate: dates.returnDate,
+      wantsFlight: /\b(flight|airfare|route|fare)\b/i.test(userMessage) || Boolean(route),
+      wantsHotel: /\b(hotel|hotels|stay|resort)\b/i.test(userMessage),
       fallbackArgs: [city.command, city.value],
     };
   }
@@ -418,7 +420,7 @@ async function runScraper(plan) {
       resultJson: null,
     }));
 
-    if (hasUsableGoogleTrip(googleResult.resultJson)) return googleResult;
+    if (hasUsableGoogleTrip(googleResult.resultJson, plan)) return googleResult;
 
     const kayakResult = await runNodeScraper({
       ...plan,
@@ -511,12 +513,14 @@ async function runNodeScraper(plan) {
   };
 }
 
-function hasUsableGoogleTrip(value) {
-  return value?.source === "google_trip" &&
-    Array.isArray(value?.flight?.deals) &&
-    value.flight.deals.length > 0 &&
-    Array.isArray(value?.hotel?.hotels) &&
-    value.hotel.hotels.length > 0;
+function hasUsableGoogleTrip(value, plan = {}) {
+  if (value?.source !== "google_trip") return false;
+
+  const hasFlights = Array.isArray(value?.flight?.deals) && value.flight.deals.length > 0;
+  const hasHotels = Array.isArray(value?.hotel?.hotels) && value.hotel.hotels.length > 0;
+  if (plan.wantsFlight && !plan.wantsHotel) return hasFlights;
+  if (plan.wantsHotel && !plan.wantsFlight) return hasHotels;
+  return hasFlights && hasHotels;
 }
 
 async function findSavedResultPath({ stdout, startedAt }) {
@@ -692,6 +696,18 @@ function inferTripDates(input) {
   if (explicitDates.length >= 2) return { depart: explicitDates[0], returnDate: explicitDates[1] };
   if (explicitDates.length === 1) return { depart: explicitDates[0], returnDate: addDaysIso(explicitDates[0], 3) };
 
+  const today = todayIsoCentral();
+  if (/\btoday\s+(?:or|\/|and)\s+tomorrow\b/i.test(input) || /\btomorrow\s+(?:or|\/|and)\s+today\b/i.test(input)) {
+    return { depart: today, returnDate: addDaysIso(today, 1) };
+  }
+  if (/\btomorrow\b/i.test(input)) {
+    const depart = addDaysIso(today, 1);
+    return { depart, returnDate: addDaysIso(depart, 1) };
+  }
+  if (/\btoday\b/i.test(input)) {
+    return { depart: today, returnDate: addDaysIso(today, 1) };
+  }
+
   const monthMatch = input.match(/\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\b/i);
   if (monthMatch) {
     const now = new Date();
@@ -704,6 +720,17 @@ function inferTripDates(input) {
 
   const fallbackDepart = addDaysIso(new Date().toISOString().slice(0, 10), 28);
   return { depart: fallbackDepart, returnDate: addDaysIso(fallbackDepart, 3) };
+}
+
+function todayIsoCentral() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
 }
 
 function monthNumber(value) {
