@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "ingest:travel": "node scripts/ingest-travel-results.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.2",
