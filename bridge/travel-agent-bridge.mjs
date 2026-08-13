@@ -144,7 +144,7 @@ server.listen(PORT, HOST, () => {
 
 function isTravelRequest(input) {
   const normalized = input.toLowerCase();
-  return TRAVEL_TERMS.some((term) => normalized.includes(term)) &&
+  return (TRAVEL_TERMS.some((term) => normalized.includes(term)) || hasRouteRequest(input)) &&
     !BLOCKED_TERMS.some((term) => normalized.includes(term));
 }
 
@@ -202,9 +202,27 @@ const CITY_ALIASES = [
   { match: /\b(boston|bos)\b/i, command: "city", value: "Boston", label: "Boston", airport: "BOS" },
   { match: /\b(new york city|new york|nyc|jfk|lga|ewr)\b/i, command: "city", value: "New York", label: "New York City", airport: "JFK" },
   { match: /\b(portland|pdx)\b/i, command: "city", value: "Portland", label: "Portland", airport: "PDX" },
+  { match: /\b(denver|den)\b/i, command: "city", value: "Denver", label: "Denver", airport: "DEN" },
   { match: /\b(paris|cdg)\b/i, command: "city", value: "Paris", label: "Paris", airport: "CDG" },
   { match: /\b(dublin|dub)\b/i, command: "city", value: "Dublin", label: "Dublin", airport: "DUB" },
 ];
+
+const AIRPORT_CITY_MAP = {
+  AUS: "Austin",
+  BOS: "Boston",
+  CDG: "Paris",
+  DEN: "Denver",
+  DFW: "Dallas",
+  DUB: "Dublin",
+  EWR: "New York",
+  JFK: "New York",
+  LGA: "New York",
+  MIA: "Miami",
+  PDX: "Portland",
+  SEA: "Seattle",
+  SFO: "San Francisco",
+  XNA: "Northwest Arkansas",
+};
 
 const MONTH_WORDS = "january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec";
 const CITY_STOP_WORDS = new Set([
@@ -242,7 +260,7 @@ const CRUISE_PORT_ALIASES = [
 ];
 
 function planScrape(userMessage) {
-  const wantsLiveScrape = /\b(scrape|search|find|deal|price|cheap|flight|hotel|cruise|package|live|book)\b/i.test(userMessage);
+  const wantsLiveScrape = /\b(scrape|search|find|check|deal|price|cheap|flight|hotel|cruise|package|live|book)\b/i.test(userMessage) || hasRouteRequest(userMessage);
   if (!wantsLiveScrape) return null;
 
   const wantsCruise = /\b(cruise|sailing|port)\b/i.test(userMessage);
@@ -251,7 +269,8 @@ function planScrape(userMessage) {
     if (port) return { kind: "cruise", label: port.label, args: [port.command, port.value] };
   }
 
-  const city = resolveCityPlan(userMessage);
+  const route = resolveRoutePlan(userMessage);
+  const city = route || resolveCityPlan(userMessage);
   if (city) {
     const dates = inferTripDates(userMessage);
     return {
@@ -260,7 +279,7 @@ function planScrape(userMessage) {
       args: [city.command, city.value],
       city: city.value,
       airport: city.airport,
-      origin: inferOrigin(userMessage),
+      origin: city.origin || inferOrigin(userMessage),
       depart: dates.depart,
       returnDate: dates.returnDate,
       fallbackArgs: [city.command, city.value],
@@ -272,6 +291,42 @@ function planScrape(userMessage) {
       kind: "deal-discovery",
       label: "general travel deal discovery",
       args: ["deals", `--query=${sanitizeDealQuery(userMessage)}`],
+    };
+  }
+
+  return null;
+}
+
+function hasRouteRequest(input) {
+  return /\b[A-Z]{3}\s*(?:to|->|→|-)\s*(?:[A-Z]{3}|[a-z][a-z .'-]{1,60})\b/i.test(input);
+}
+
+function resolveRoutePlan(userMessage) {
+  const airportToAirport = userMessage.match(/\b([A-Z]{3})\s*(?:to|->|→|-)\s*([A-Z]{3})\b/i);
+  if (airportToAirport) {
+    const origin = airportToAirport[1].toUpperCase();
+    const airport = airportToAirport[2].toUpperCase();
+    const city = AIRPORT_CITY_MAP[airport] || airport;
+    return {
+      command: "city",
+      value: city,
+      label: `${origin} to ${city}`,
+      airport,
+      origin,
+    };
+  }
+
+  const airportToCity = userMessage.match(/\b([A-Z]{3})\s*(?:to|->|→|-)\s*([a-z][a-z .'-]{1,60}?)(?=\s+(?:from|during|on|this|next|in|flights?|hotels?|packages?|deals?|prices?|cheap|live|book|round\s*trip)\b|[?.!,]|$)/i);
+  if (airportToCity) {
+    const origin = airportToCity[1].toUpperCase();
+    const city = cleanCityName(airportToCity[2]);
+    if (!city) return null;
+    return {
+      command: "city",
+      value: city,
+      label: `${origin} to ${city}`,
+      airport: inferAirportForCity(city),
+      origin,
     };
   }
 
@@ -335,7 +390,12 @@ function titleCaseWord(value) {
 function inferDestinationAirport(input, city) {
   const routeMatch = input.match(/\bto\s+([A-Z]{3})\b/);
   if (routeMatch && routeMatch[1].toUpperCase() !== inferOrigin(input)) return routeMatch[1].toUpperCase();
-  return city;
+  return inferAirportForCity(city);
+}
+
+function inferAirportForCity(city) {
+  const known = CITY_ALIASES.find((item) => item.value.toLowerCase() === city.toLowerCase());
+  return known?.airport || city;
 }
 
 function sanitizeDealQuery(value) {
