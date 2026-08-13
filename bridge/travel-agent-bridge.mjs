@@ -15,6 +15,7 @@ const TRAVEL_SCRAPER_RESULTS_DIR = process.env.TRAVEL_SCRAPER_RESULTS_DIR || pat
 const CAMOUFOX_PY = process.env.CAMOUFOX_PY || "D:\\OpenClaw\\CamouFox\\.venv\\Scripts\\python.exe";
 const SCRAPER_TIMEOUT_MS = Number(process.env.TRAVEL_SCRAPER_TIMEOUT_MS || 240_000);
 const execFileAsync = promisify(execFile);
+let activeScrape = null;
 
 const TRAVEL_TERMS = [
   "travel",
@@ -99,8 +100,20 @@ const server = http.createServer(async (request, response) => {
     }
 
     const scrapePlan = planScrape(userMessage);
-    const scrapeResult = scrapePlan
-      ? await runScraper(scrapePlan).catch((error) => ({
+    if (scrapePlan && activeScrape) {
+      return sendJson(response, 200, {
+        answer: `I am already running a live TravelDash check for ${activeScrape.label}. Ask again in a few minutes and I will run this city right then.`,
+        cards: [],
+      });
+    }
+
+    let scrapeResult = null;
+    if (scrapePlan) {
+      activeScrape = { label: scrapePlan.label, startedAt: Date.now() };
+      try {
+        scrapeResult = await runScraper(scrapePlan);
+      } catch (error) {
+        scrapeResult = {
           command: `node src\\index.js ${scrapePlan.args.join(" ")}`,
           label: scrapePlan.label,
           savedPath: undefined,
@@ -108,8 +121,11 @@ const server = http.createServer(async (request, response) => {
           stderrTail: "",
           error: error instanceof Error ? error.message : "Scraper failed",
           resultJson: null,
-        }))
-      : null;
+        };
+      } finally {
+        activeScrape = null;
+      }
+    }
     const agentResponse = await callLocalModel({ userMessage, history, scrapePlan, scrapeResult });
     return sendJson(response, 200, normalizeAgentResponse(agentResponse));
   } catch (error) {
@@ -190,6 +206,36 @@ const CITY_ALIASES = [
   { match: /\b(dublin|dub)\b/i, command: "city", value: "Dublin", label: "Dublin", airport: "DUB" },
 ];
 
+const MONTH_WORDS = "january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec";
+const CITY_STOP_WORDS = new Set([
+  "a",
+  "about",
+  "and",
+  "any",
+  "book",
+  "cheap",
+  "check",
+  "city",
+  "deal",
+  "deals",
+  "find",
+  "flight",
+  "flights",
+  "for",
+  "from",
+  "hotel",
+  "hotels",
+  "in",
+  "live",
+  "me",
+  "package",
+  "prices",
+  "search",
+  "the",
+  "to",
+  "trip",
+]);
+
 const CRUISE_PORT_ALIASES = [
   { match: /\b(galveston)\b/i, command: "cruise", value: "Galveston", label: "Galveston cruise" },
   { match: /\b(miami)\b/i, command: "cruise", value: "Miami", label: "Miami cruise" },
@@ -205,7 +251,7 @@ function planScrape(userMessage) {
     if (port) return { kind: "cruise", label: port.label, args: [port.command, port.value] };
   }
 
-  const city = CITY_ALIASES.find((item) => item.match.test(userMessage));
+  const city = resolveCityPlan(userMessage);
   if (city) {
     const dates = inferTripDates(userMessage);
     return {
@@ -230,6 +276,66 @@ function planScrape(userMessage) {
   }
 
   return null;
+}
+
+function resolveCityPlan(userMessage) {
+  const knownCity = CITY_ALIASES.find((item) => item.match.test(userMessage));
+  if (knownCity) return knownCity;
+
+  const extractedCity = extractRequestedCity(userMessage);
+  if (!extractedCity) return null;
+
+  const airport = inferDestinationAirport(userMessage, extractedCity);
+  return {
+    command: "city",
+    value: extractedCity,
+    label: extractedCity,
+    airport,
+  };
+}
+
+function extractRequestedCity(input) {
+  const patterns = [
+    new RegExp(`\\b(?:to|in|for|near)\\s+([a-z][a-z .'-]{1,60}?)(?=\\s+(?:from|during|on|this|next|${MONTH_WORDS}|flights?|hotels?|packages?|deals?|prices?|cheap|live|book|round\\s*trip)\\b|[?.!,]|$)`, "i"),
+    /\b([a-z][a-z .'-]{1,60}?)\s+(?:flights?\s+(?:and|&|\+)\s+hotels?|hotels?\s+(?:and|&|\+)\s+flights?)\b/i,
+    /\b(?:flights?|hotels?|packages?|deals?)\s+(?:to|in|for|near)\s+([a-z][a-z .'-]{1,60}?)(?=\s+(?:from|during|on|this|next|flights?|hotels?|packages?|deals?|prices?|cheap|live|book)\b|[?.!,]|$)/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = input.match(pattern);
+    const city = cleanCityName(match?.[1]);
+    if (city) return city;
+  }
+
+  return null;
+}
+
+function cleanCityName(value) {
+  const words = String(value || "")
+    .replace(/\b(20\d{2}-\d{2}-\d{2})\b/g, " ")
+    .replace(new RegExp(`\\b(${MONTH_WORDS})\\b`, "gi"), " ")
+    .replace(/\b[A-Z]{3}\b/g, " ")
+    .replace(/[^a-zA-Z .'-]/g, " ")
+    .split(/\s+/)
+    .map((word) => word.trim())
+    .filter(Boolean)
+    .filter((word) => !CITY_STOP_WORDS.has(word.toLowerCase()));
+
+  if (!words.length || words.length > 5) return null;
+  return words.map(titleCaseWord).join(" ");
+}
+
+function titleCaseWord(value) {
+  return value
+    .split(/([.'-])/)
+    .map((part) => /^[a-z]/i.test(part) ? `${part[0].toUpperCase()}${part.slice(1).toLowerCase()}` : part)
+    .join("");
+}
+
+function inferDestinationAirport(input, city) {
+  const routeMatch = input.match(/\bto\s+([A-Z]{3})\b/);
+  if (routeMatch && routeMatch[1].toUpperCase() !== inferOrigin(input)) return routeMatch[1].toUpperCase();
+  return city;
 }
 
 function sanitizeDealQuery(value) {
