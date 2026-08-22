@@ -8,8 +8,9 @@ import IntakeSection from "@/components/IntakeSection";
 import UploadSection from "@/components/UploadSection";
 import StatsBar from "@/components/StatsBar";
 import TravelChat from "@/components/TravelChat";
+import MasterCalendar from "@/components/MasterCalendar";
 
-export type ActiveTab = "packages" | "intake" | "upload" | "chat";
+export type ActiveTab = "packages" | "calendar" | "intake" | "upload" | "chat";
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("packages");
@@ -55,6 +56,12 @@ export default function Dashboard() {
         {activeTab === "intake" && (
           <main className="mx-auto max-w-3xl px-4 py-10 sm:px-6 lg:px-8">
             <IntakeSection />
+          </main>
+        )}
+
+        {activeTab === "calendar" && (
+          <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+            <MasterCalendar />
           </main>
         )}
 

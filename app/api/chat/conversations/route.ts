@@ -45,3 +45,36 @@ export async function POST(request: Request) {
     );
   }
 }
+
+export async function DELETE(request: Request) {
+  try {
+    const ownerEmail = await requireSignedInUserEmail();
+    const searchParams = new URL(request.url).searchParams;
+    const conversationId = searchParams.get("conversationId");
+    const deleteAll = searchParams.get("all") === "true";
+
+    if (!conversationId && !deleteAll) {
+      return NextResponse.json({ error: "conversationId or all=true is required" }, { status: 400 });
+    }
+
+    const supabase = createServerSupabase();
+    let query = supabase
+      .from("travel_chat_conversations")
+      .delete()
+      .eq("owner_email", ownerEmail);
+
+    if (!deleteAll && conversationId) {
+      query = query.eq("id", conversationId);
+    }
+
+    const { error } = await query;
+
+    if (error) throw error;
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Could not delete conversations" },
+      { status: 401 },
+    );
+  }
+}

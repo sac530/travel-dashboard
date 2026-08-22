@@ -17,7 +17,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { getActivePackages, getDealsByPackage, getExtrasByPackage } from "@/lib/api";
+import { getActivePackages, getDealsByPackage, getExtrasByPackage, requestPackageRenewal } from "@/lib/api";
 import type { Deal, Extra, Package } from "@/lib/supabase";
 
 const SAMPLE_PACKAGES: Package[] = [
@@ -169,6 +169,8 @@ export default function PackageGrid({
   const [selectedPackage, setSelectedPackage] = useState<Package | null>(null);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "sample" | "error">("loading");
   const [error, setError] = useState("");
+  const [renewingPackageId, setRenewingPackageId] = useState<string | null>(null);
+  const [renewedPackageIds, setRenewedPackageIds] = useState<Set<string>>(new Set());
 
   const loadPackages = useCallback(async () => {
     setLoadState("loading");
@@ -208,6 +210,20 @@ export default function PackageGrid({
   }, [loadPackages]);
 
   const activeDetails = selectedPackage ? details[selectedPackage.id] || { deals: [], extras: [] } : null;
+
+  async function handleRenewPackage(pkg: Package) {
+    setRenewingPackageId(pkg.id);
+    setError("");
+    try {
+      await requestPackageRenewal(pkg, details[pkg.id]?.deals || []);
+      setPackages((current) => current.map((item) => (item.id === pkg.id ? { ...item, status: "refresh_requested" } : item)));
+      setRenewedPackageIds((current) => new Set(current).add(pkg.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not queue package renewal.");
+    } finally {
+      setRenewingPackageId(null);
+    }
+  }
 
   if (loading || loadState === "loading") {
     return (
@@ -269,49 +285,69 @@ export default function PackageGrid({
       </div>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {packages.map((pkg, index) => (
-          <button
-            key={pkg.id}
-            type="button"
-            onClick={() => setSelectedPackage(pkg)}
-            className="glass-card group overflow-hidden text-left shadow-2xl shadow-black/20 transition hover:-translate-y-1 hover:border-white/20"
-          >
-            <div className="relative h-52 overflow-hidden bg-slate-900">
-              <img
-                src={getDestinationImage(pkg, index)}
-                alt={`${pkg.destination} travel photo`}
-                className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#07111f]/90 via-[#07111f]/10 to-transparent" />
-              <div className="absolute bottom-3 left-4 right-4">
-                <span className="rounded-full bg-black/50 px-3 py-1 text-xs font-medium text-white backdrop-blur">
-                  {pkg.origin || "TBD"} to {pkg.destination}
-                </span>
-              </div>
-            </div>
-            <div className="p-5">
-              <h3 className="min-h-[3.5rem] text-lg font-bold leading-7 text-white transition group-hover:text-sky-200">
-                {pkg.title}
-              </h3>
-              <div className="mt-2 flex items-center gap-2 text-sm text-slate-400">
-                <Calendar className="h-4 w-4" />
-                {formatDate(pkg.start_date)} - {formatDate(pkg.end_date)}
-              </div>
-              <div className="mt-4 flex items-end justify-between gap-3">
-                <div>
-                  <span className="text-xs uppercase tracking-wide text-slate-500">Package total</span>
-                  <p className="text-2xl font-bold text-gradient">{formatMoney(pkg.total_price)}</p>
+        {packages.map((pkg, index) => {
+          const packageDeals = details[pkg.id]?.deals || [];
+          const isExpired = getDaysRemaining(pkg.expires_at, REFERENCE_NOW) <= 0;
+          const renewalQueued = pkg.status === "refresh_requested" || renewedPackageIds.has(pkg.id);
+
+          return (
+            <article
+              key={pkg.id}
+              className="glass-card group overflow-hidden text-left shadow-2xl shadow-black/20 transition hover:-translate-y-1 hover:border-white/20"
+            >
+              <button type="button" onClick={() => setSelectedPackage(pkg)} className="block w-full text-left">
+                <div className="relative h-52 overflow-hidden bg-slate-900">
+                  <img
+                    src={getDestinationImage(pkg, index)}
+                    alt={`${pkg.destination} travel photo`}
+                    className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#07111f]/90 via-[#07111f]/10 to-transparent" />
+                  <div className="absolute bottom-3 left-4 right-4">
+                    <span className="rounded-full bg-black/50 px-3 py-1 text-xs font-medium text-white backdrop-blur">
+                      {pkg.origin || "TBD"} to {pkg.destination}
+                    </span>
+                  </div>
                 </div>
-                <DaysRemaining expiresAt={pkg.expires_at} now={REFERENCE_NOW} />
+              </button>
+              <div className="p-5">
+                <button type="button" onClick={() => setSelectedPackage(pkg)} className="block w-full text-left">
+                  <h3 className="min-h-[3.5rem] text-lg font-bold leading-7 text-white transition group-hover:text-sky-200">
+                    {pkg.title}
+                  </h3>
+                  <div className="mt-2 flex items-center gap-2 text-sm text-slate-400">
+                    <Calendar className="h-4 w-4" />
+                    {formatDate(pkg.start_date)} - {formatDate(pkg.end_date)}
+                  </div>
+                </button>
+                <div className="mt-4 flex items-end justify-between gap-3">
+                  <div>
+                    <span className="text-xs uppercase tracking-wide text-slate-500">Package total</span>
+                    <p className="text-2xl font-bold text-gradient">{formatMoney(pkg.total_price)}</p>
+                  </div>
+                  <div className="flex flex-col items-end gap-2">
+                    <DaysRemaining expiresAt={pkg.expires_at} now={REFERENCE_NOW} status={pkg.status} />
+                    {isExpired && (
+                      <button
+                        type="button"
+                        onClick={() => void handleRenewPackage(pkg)}
+                        disabled={renewingPackageId === pkg.id || renewalQueued}
+                        className="rounded-md border border-sky-300/30 bg-sky-400/10 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-sky-100 transition hover:border-sky-200/60 hover:bg-sky-400/20 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/5 disabled:text-slate-500"
+                      >
+                        {renewalQueued ? "Queued" : renewingPackageId === pkg.id ? "Renewing" : "Renew"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <DealBadge icon={Plane} label="Flight" url={findDealUrl(packageDeals, "flight")} />
+                  <DealBadge icon={Hotel} label="Hotel" url={findDealUrl(packageDeals, "hotel")} />
+                  <DealBadge icon={Car} label="Car" url={findDealUrl(packageDeals, "car")} />
+                </div>
               </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Badge icon={Plane} label="Flight" />
-                <Badge icon={Hotel} label="Hotel" />
-                <Badge icon={Car} label="Car" />
-              </div>
-            </div>
-          </button>
-        ))}
+            </article>
+          );
+        })}
       </div>
     </section>
   );
@@ -364,7 +400,7 @@ function PackageDetail({
               {pkg.notes && <p className="mt-3 max-w-2xl text-sm text-slate-400">{pkg.notes}</p>}
             </div>
             <div className="flex items-center gap-3">
-              <DaysRemaining expiresAt={pkg.expires_at} now={REFERENCE_NOW} />
+              <DaysRemaining expiresAt={pkg.expires_at} now={REFERENCE_NOW} status={pkg.status} />
               <button
                 type="button"
                 onClick={onRefresh}
@@ -503,7 +539,10 @@ function DealCard({ deal }: { deal: Deal }) {
   );
 }
 
-function DaysRemaining({ expiresAt, now }: { expiresAt: string; now: number }) {
+function DaysRemaining({ expiresAt, now, status }: { expiresAt: string; now: number; status?: Package["status"] }) {
+  if (status === "refresh_requested") {
+    return <span className="rounded-full bg-sky-400/10 px-3 py-1 text-sm font-semibold text-sky-200">Renewal queued</span>;
+  }
   const days = getDaysRemaining(expiresAt, now);
   if (days <= 0) return <span className="rounded-full bg-rose-400/10 px-3 py-1 text-sm font-semibold text-rose-200">Expired</span>;
   if (days <= 3) return <span className="rounded-full bg-orange-400/10 px-3 py-1 text-sm font-semibold text-orange-200">{days}d left</span>;
@@ -531,19 +570,50 @@ function Metric({ icon: Icon, label, value }: { icon: ComponentType<{ className?
   );
 }
 
-function Badge({ icon: Icon, label }: { icon: ComponentType<{ className?: string }>; label: string }) {
-  return (
-    <span className="flex items-center gap-1 rounded-full border border-white/10 bg-white/6 px-2.5 py-1 text-xs text-slate-300">
-      <Icon className="h-3.5 w-3.5 text-sky-300" />
-      {label}
-    </span>
-  );
-}
-
 function getDestinationImage(pkg: Package, index: number) {
   const haystack = `${pkg.destination || ""} ${pkg.title || ""}`.toLowerCase();
   const match = DESTINATION_IMAGE_MATCHES.find((item) => haystack.includes(item.match));
   return match?.image || DEST_IMAGES[index % DEST_IMAGES.length];
+}
+
+function DealBadge({
+  icon: Icon,
+  label,
+  url,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  url?: string | null;
+}) {
+  const className =
+    "flex items-center gap-1 rounded-full border border-white/10 bg-white/6 px-2.5 py-1 text-xs text-slate-300 transition";
+
+  if (!url) {
+    return (
+      <span className={className} title={`${label} booking link not available yet`}>
+        <Icon className="h-3.5 w-3.5 text-sky-300" />
+        {label}
+      </span>
+    );
+  }
+
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`${className} hover:border-sky-300/40 hover:text-sky-100`}
+      title={`Open ${label.toLowerCase()} booking link`}
+    >
+      <Icon className="h-3.5 w-3.5 text-sky-300" />
+      {label}
+      <ExternalLink className="h-3 w-3 text-slate-500" />
+    </a>
+  );
+}
+
+function findDealUrl(deals: Deal[], type: Deal["deal_type"]) {
+  return deals.find((deal) => deal.deal_type === type && deal.order_url)?.order_url || null;
 }
 
 function formatMoney(value?: number | string | null) {

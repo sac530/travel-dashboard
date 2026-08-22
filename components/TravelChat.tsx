@@ -8,11 +8,12 @@ import {
   Hotel,
   Loader2,
   MessageCircle,
+  MessageSquarePlus,
   Plane,
-  Plus,
   Send,
   Sparkles,
   Star,
+  Trash2,
   Utensils,
 } from "lucide-react";
 import type { TravelChatConversation, TravelChatMessage, TravelResultCard } from "@/lib/travel-chat-types";
@@ -31,6 +32,8 @@ export default function TravelChat() {
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [deletingConversationId, setDeletingConversationId] = useState<string | null>(null);
+  const [clearingHistory, setClearingHistory] = useState(false);
   const transcriptRef = useRef<HTMLDivElement>(null);
 
   const activeConversation = conversations.find((conversation) => conversation.id === activeConversationId);
@@ -83,18 +86,55 @@ export default function TravelChat() {
   }, [messages, draftAssistant?.content, draftAssistant?.cards.length]);
 
   async function startNewChat() {
-    const response = await fetch("/api/chat/conversations", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ title: "New travel chat" }),
-    });
-    if (!response.ok) return;
-    const json = await response.json();
-    const conversation = json.conversation as TravelChatConversation;
-    setConversations((current) => [conversation, ...current]);
-    setActiveConversationId(conversation.id);
+    setActiveConversationId(null);
     setMessages([]);
     setDraftAssistant(null);
+    setStatus("");
+    setInput("");
+  }
+
+  async function deleteConversation(conversationId: string) {
+    if (sending || deletingConversationId) return;
+
+    setDeletingConversationId(conversationId);
+    try {
+      const response = await fetch(
+        `/api/chat/conversations?conversationId=${encodeURIComponent(conversationId)}`,
+        { method: "DELETE" },
+      );
+      if (!response.ok) throw new Error("Could not delete chat");
+
+      setConversations((current) => {
+        const next = current.filter((conversation) => conversation.id !== conversationId);
+        if (activeConversationId === conversationId) {
+          setActiveConversationId(next[0]?.id || null);
+          setMessages([]);
+          setDraftAssistant(null);
+        }
+        return next;
+      });
+    } finally {
+      setDeletingConversationId(null);
+    }
+  }
+
+  async function clearHistory() {
+    if (sending || clearingHistory || !conversations.length) return;
+    if (!window.confirm("Delete all TravelDash chat history?")) return;
+
+    setClearingHistory(true);
+    try {
+      const response = await fetch("/api/chat/conversations?all=true", { method: "DELETE" });
+      if (!response.ok) throw new Error("Could not clear chat history");
+
+      setConversations([]);
+      setActiveConversationId(null);
+      setMessages([]);
+      setDraftAssistant(null);
+      setStatus("");
+    } finally {
+      setClearingHistory(false);
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -195,49 +235,78 @@ export default function TravelChat() {
   return (
     <section className="grid min-h-[calc(100vh-12rem)] gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
       <aside className="glass-card flex min-h-0 flex-col p-3">
-        <div className="mb-3 flex items-center justify-between gap-2 px-1">
-          <div>
-            <p className="text-xs uppercase text-slate-500">Private</p>
-            <h2 className="font-semibold text-white">Travel chats</h2>
-          </div>
+        <div className="mb-3 px-1">
+          <p className="text-xs uppercase text-slate-500">Private</p>
+          <h2 className="font-semibold text-white">Travel chats</h2>
+        </div>
+
+        <button
+          type="button"
+          onClick={startNewChat}
+          className="mb-3 flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-sky-500 px-3 text-sm font-semibold text-white transition hover:bg-sky-400"
+        >
+          <MessageSquarePlus className="h-4 w-4" />
+          New chat
+        </button>
+
+        <div className="mb-2 flex items-center justify-between gap-2 px-1">
+          <span className="text-xs font-medium uppercase text-slate-500">History</span>
           <button
             type="button"
-            onClick={startNewChat}
-            className="flex h-9 w-9 items-center justify-center rounded-lg bg-sky-500 text-white transition hover:bg-sky-400"
-            title="New chat"
+            onClick={clearHistory}
+            disabled={clearingHistory || sending || !conversations.length}
+            className="flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition hover:bg-rose-500/10 hover:text-rose-200 disabled:cursor-not-allowed disabled:opacity-40"
+            title="Clear history"
           >
-            <Plus className="h-4 w-4" />
+            {clearingHistory ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
           </button>
         </div>
 
         <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
           {loading && <p className="px-2 py-3 text-sm text-slate-500">Loading chats...</p>}
           {!loading && !conversations.length && (
-            <button
-              type="button"
-              onClick={startNewChat}
-              className="w-full rounded-lg border border-dashed border-white/12 p-4 text-left text-sm text-slate-400 transition hover:border-sky-300/30 hover:text-sky-200"
-            >
-              Start your first trip chat
-            </button>
+            <p className="rounded-lg border border-dashed border-white/12 p-4 text-sm text-slate-500">
+              No saved chats yet.
+            </p>
           )}
           {conversations.map((conversation) => (
-            <button
+            <div
               key={conversation.id}
-              type="button"
-              onClick={() => setActiveConversationId(conversation.id)}
-              className={`w-full rounded-lg px-3 py-3 text-left transition ${
+              className={`group flex items-stretch overflow-hidden rounded-lg transition ${
                 activeConversationId === conversation.id
-                  ? "bg-sky-500/18 text-sky-100"
-                  : "text-slate-400 hover:bg-white/7 hover:text-white"
+                  ? "bg-sky-500/18"
+                  : "hover:bg-white/7"
               }`}
             >
-              <span className="line-clamp-2 text-sm font-medium">{conversation.title}</span>
-              <span className="mt-1 flex items-center gap-1 text-xs text-slate-500">
-                <CalendarDays className="h-3 w-3" />
-                {new Date(conversation.updated_at).toLocaleDateString()}
-              </span>
-            </button>
+              <button
+                type="button"
+                onClick={() => setActiveConversationId(conversation.id)}
+                className={`min-w-0 flex-1 px-3 py-3 text-left ${
+                  activeConversationId === conversation.id
+                    ? "text-sky-100"
+                    : "text-slate-400 group-hover:text-white"
+                }`}
+              >
+                <span className="line-clamp-2 text-sm font-medium">{conversation.title}</span>
+                <span className="mt-1 flex items-center gap-1 text-xs text-slate-500">
+                  <CalendarDays className="h-3 w-3" />
+                  {new Date(conversation.updated_at).toLocaleDateString()}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => deleteConversation(conversation.id)}
+                disabled={sending || deletingConversationId === conversation.id}
+                className="flex w-10 shrink-0 items-center justify-center text-slate-500 opacity-100 transition hover:bg-rose-500/10 hover:text-rose-200 disabled:cursor-not-allowed disabled:opacity-40 sm:opacity-0 sm:group-hover:opacity-100"
+                title="Delete chat"
+              >
+                {deletingConversationId === conversation.id ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3.5 w-3.5" />
+                )}
+              </button>
+            </div>
           ))}
         </div>
       </aside>
@@ -250,31 +319,24 @@ export default function TravelChat() {
                 <Bot className="h-4 w-4" />
                 TravelDash AI
               </div>
-              <h1 className="text-2xl font-bold text-white">{activeConversation?.title || "Ask about a trip"}</h1>
-            </div>
-            <div className="rounded-lg border border-emerald-300/20 bg-emerald-400/10 px-3 py-2 text-sm text-emerald-100">
-              Travel-only tools
+              <h1 className="text-2xl font-bold text-white">{activeConversation?.title || "New travel chat"}</h1>
             </div>
           </div>
         </div>
 
         <div ref={transcriptRef} className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-5 sm:px-6">
           {!messages.length && !draftAssistant && (
-            <div className="mx-auto max-w-3xl py-14 text-center">
+            <div className="mx-auto max-w-2xl py-16 text-center">
               <MessageCircle className="mx-auto mb-4 h-10 w-10 text-sky-300" />
-              <h2 className="text-2xl font-bold text-white">Plan, compare, and refine travel ideas</h2>
-              <p className="mx-auto mt-3 max-w-xl text-slate-400">
-                Ask for flights, hotels, restaurants, attractions, weather, itineraries, or package comparisons.
-              </p>
-              <div className="mt-6 grid gap-3 text-left sm:grid-cols-3">
+              <h2 className="text-2xl font-bold text-white">What trip are we checking?</h2>
+              <div className="mt-6 grid gap-2 text-left sm:grid-cols-3">
                 {["Find hotels downtown", "Compare beach trips", "Build a 3-day itinerary"].map((prompt) => (
                   <button
                     key={prompt}
                     type="button"
                     onClick={() => setInput(prompt)}
-                    className="rounded-lg border border-white/10 bg-white/6 p-4 text-sm text-slate-300 transition hover:border-sky-300/30 hover:text-sky-200"
+                    className="rounded-lg border border-white/10 bg-white/6 px-3 py-3 text-sm text-slate-300 transition hover:border-sky-300/30 hover:text-sky-200"
                   >
-                    <Sparkles className="mb-2 h-4 w-4 text-orange-200" />
                     {prompt}
                   </button>
                 ))}

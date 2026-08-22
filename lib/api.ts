@@ -5,7 +5,7 @@ export async function getActivePackages() {
   const { data, error } = await supabase
     .from('packages')
     .select('*')
-    .eq('status', 'active')
+    .in('status', ['active', 'refresh_requested'])
     .order('created_at', { ascending: false });
   if (error) throw error;
   return (data || []) as Package[];
@@ -23,8 +23,43 @@ export async function createPackage(pkg: Omit<Package, 'id' | 'created_at' | 'ex
 }
 
 export async function updatePackage(id: string, updates: Partial<Package>) {
-  const { data } = await supabase.from('packages').update(updates).eq('id', id).select().single();
+  const { data, error } = await supabase.from('packages').update(updates).eq('id', id).select().single();
+  if (error) throw error;
   return data as Package | null;
+}
+
+export async function requestPackageRenewal(pkg: Package, deals: Deal[] = []) {
+  const flightDeals = deals.filter((deal) => deal.deal_type === 'flight');
+  const hotelDeals = deals.filter((deal) => deal.deal_type === 'hotel');
+  const carDeals = deals.filter((deal) => deal.deal_type === 'car');
+
+  const summarizeDeals = (items: Deal[]) =>
+    items
+      .map((deal) => `${deal.provider}: ${deal.title}${deal.price ? ` (${formatMoney(deal.price)})` : ''}`)
+      .join('\n') || null;
+
+  const notes = [
+    `Renew expired TravelDash package: ${pkg.title}.`,
+    pkg.notes ? `Previous notes: ${pkg.notes}` : null,
+    carDeals.length ? `Recheck car options:\n${summarizeDeals(carDeals)}` : 'Recheck car rental options if useful for this trip.',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+
+  const submission = await createIntakeSubmission({
+    destination: pkg.destination,
+    origin: pkg.origin || null,
+    start_date: pkg.start_date || null,
+    end_date: pkg.end_date || null,
+    flight_info: summarizeDeals(flightDeals),
+    hotel_info: summarizeDeals(hotelDeals),
+    budget_max: pkg.total_price || null,
+    notes,
+    status: 'pending',
+  });
+
+  await updatePackage(pkg.id, { status: 'refresh_requested' });
+  return submission;
 }
 
 // ─── Deals ──────────────────────────────────────────────────
@@ -89,4 +124,10 @@ export async function getExpiredPackages() {
 export async function markPackageExpired(id: string) {
   const { data } = await supabase.from('packages').update({ status: 'expired' }).eq('id', id).select().single();
   return data;
+}
+
+function formatMoney(value?: number | string | null) {
+  const numeric = Number(value || 0);
+  if (!numeric) return '';
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(numeric);
 }

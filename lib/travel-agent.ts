@@ -51,8 +51,12 @@ const BLOCKED_TERMS = [
 export function isTravelRequest(input: string) {
   const normalized = input.toLowerCase();
   const blocked = BLOCKED_TERMS.some((term) => normalized.includes(term));
-  const travelRelated = TRAVEL_TERMS.some((term) => normalized.includes(term));
+  const travelRelated = TRAVEL_TERMS.some((term) => normalized.includes(term)) || hasRouteRequest(input);
   return travelRelated && !blocked;
+}
+
+function hasRouteRequest(input: string) {
+  return /\b[A-Z]{3}\s*(?:to|->|→|-)\s*(?:[A-Z]{3}|[a-z][a-z .'-]{1,60})\b/i.test(input);
 }
 
 export async function runTravelAgent({

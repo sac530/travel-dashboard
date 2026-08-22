@@ -1,0 +1,119 @@
+[
+  {
+    "id": "master-calendar-created-2026-08-13",
+    "date": "2026-08-13",
+    "destination": "TravelDash",
+    "category": "note",
+    "title": "Master calendar started",
+    "description": "Workspace calendar added so checked destinations, research runs, and follow-ups have one place to land.",
+    "source": "Telegram request 5540"
+  },
+  {
+    "id": "miami-refresh-2026-08-14",
+    "date": "2026-08-14",
+    "destination": "Miami",
+    "category": "destination",
+    "title": "Refresh Miami package",
+    "description": "Check DFW to MIA flights, hotels, and car/activity options.",
+    "source": "Travel scraper curated destination list"
+  },
+  {
+    "id": "dfw-group-a-flight-sweep-2026-08-14",
+    "date": "2026-08-14",
+    "destination": "DFW Group A Flight Sweep",
+    "category": "research",
+    "title": "DFW to BOS/NYC/MIA flight sweep",
+    "description": "Completed DFW to BOS, NYC, and MIA flight deal sweep; best finds included MIA $114, NYC $142, BOS $159.",
+    "source": "D:\\OpenClaw\\TravelScraper\\results\\flights-us-a-2026-08-14.json"
+  },
+  {
+    "id": "san-francisco-refresh-2026-08-15",
+    "date": "2026-08-15",
+    "destination": "San Francisco",
+    "category": "destination",
+    "title": "Refresh San Francisco package",
+    "description": "Check DFW to SFO flights, hotels, and car/activity options.",
+    "source": "Travel scraper curated destination list"
+  },
+  {
+    "id": "seattle-refresh-2026-08-16",
+    "date": "2026-08-16",
+    "destination": "Seattle",
+    "category": "destination",
+    "title": "Refresh Seattle package",
+    "description": "Check DFW to SEA flights, hotels, and car/activity options.",
+    "source": "Travel scraper curated destination list"
+  },
+  {
+    "id": "boston-refresh-2026-08-17",
+    "date": "2026-08-17",
+    "destination": "Boston",
+    "category": "destination",
+    "title": "Refresh Boston package",
+    "description": "Check DFW to BOS flights, hotels, and car/activity options.",
+    "source": "Travel scraper curated destination list"
+  },
+  {
+    "id": "nyc-refresh-2026-08-18",
+    "date": "2026-08-18",
+    "destination": "New York City",
+    "category": "destination",
+    "title": "Refresh New York package",
+    "description": "Check DFW to JFK/LGA/EWR flights, hotels, and car/activity options.",
+    "source": "Travel scraper curated destination list"
+  },
+  {
+    "id": "paris-refresh-2026-08-19",
+    "date": "2026-08-19",
+    "destination": "Paris",
+    "category": "international",
+    "title": "Refresh Paris package",
+    "description": "Check DFW to CDG flights and hotel options; skip cars unless asked.",
+    "source": "Travel scraper curated destination list"
+  },
+  {
+    "id": "dublin-refresh-2026-08-20",
+    "date": "2026-08-20",
+    "destination": "Dublin",
+    "category": "international",
+    "title": "Refresh Dublin package",
+    "description": "Check DFW to DUB flights and hotel options; skip cars unless asked.",
+    "source": "Travel scraper curated destination list"
+  },
+  {
+    "id": "galveston-cruise-refresh-2026-08-21",
+    "date": "2026-08-21",
+    "destination": "Galveston",
+    "category": "cruise",
+    "title": "Refresh Galveston cruises",
+    "description": "Check iCruise, Carnival, and Royal Caribbean cruise departures.",
+    "source": "Travel scraper curated destination list"
+  },
+  {
+    "id": "miami-cruise-refresh-2026-08-22",
+    "date": "2026-08-22",
+    "destination": "Miami",
+    "category": "cruise",
+    "title": "Refresh Miami cruises",
+    "description": "Check iCruise, Carnival, and Royal Caribbean cruise departures.",
+    "source": "Travel scraper curated destination list"
+  },
+  {
+    "id": "intake-check-2026-08-17",
+    "date": "2026-08-17",
+    "destination": "TravelDash",
+    "category": "note",
+    "title": "Intake check - no pending submissions",
+    "description": "0 pending intake submissions. 3 total rows (2 completed, 1 archived). Paris/Cancun packages expired today; Alabama Gulf Coast expires tomorrow; 3 Miami/Seattle packages expire 8/20.",
+    "source": "Cron intake check"
+  },
+  {
+    "id": "intake-check-2026-08-20",
+    "date": "2026-08-20",
+    "destination": "TravelDash",
+    "category": "note",
+    "title": "Intake check - no pending, 4 packages expired",
+    "description": "0 pending, 0 processing intake submissions. Marked 4 expired packages as expired (Miami Beach Weekend, Paris Rail, Cancun All-Inclusive, AL Gulf Coast). 3 active packages remain (2x Miami, 1x Seattle).",
+    "source": "Cron travel-dashboard-intake-check"
+  }
+]

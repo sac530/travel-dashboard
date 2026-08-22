@@ -1,6 +1,6 @@
 "use client";
 
-import { LogOut, Map, Plane, Upload, ClipboardList, MessageCircle } from "lucide-react";
+import { CalendarDays, LogOut, Map, Plane, Upload, ClipboardList, MessageCircle } from "lucide-react";
 import type { ActiveTab } from "@/components/Dashboard";
 
 export default function Navbar({
@@ -14,6 +14,7 @@ export default function Navbar({
 }) {
   const tabs = [
     { key: "packages", label: "Packages", icon: Plane },
+    { key: "calendar", label: "Calendar", icon: CalendarDays },
     { key: "intake", label: "Intake", icon: ClipboardList },
     { key: "upload", label: "Upload", icon: Upload },
     { key: "chat", label: "AI Chat", icon: MessageCircle },

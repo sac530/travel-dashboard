@@ -14,6 +14,7 @@ const TRAVEL_SCRAPER_DIR = process.env.TRAVEL_SCRAPER_DIR || "D:\\OpenClaw\\Trav
 const TRAVEL_SCRAPER_RESULTS_DIR = process.env.TRAVEL_SCRAPER_RESULTS_DIR || path.join(TRAVEL_SCRAPER_DIR, "results");
 const CAMOUFOX_PY = process.env.CAMOUFOX_PY || "D:\\OpenClaw\\CamouFox\\.venv\\Scripts\\python.exe";
 const SCRAPER_TIMEOUT_MS = Number(process.env.TRAVEL_SCRAPER_TIMEOUT_MS || 240_000);
+const MODEL_TIMEOUT_MS = Number(process.env.TRAVEL_AGENT_MODEL_TIMEOUT_MS || 18_000);
 const execFileAsync = promisify(execFile);
 let activeScrape = null;
 
@@ -126,7 +127,9 @@ const server = http.createServer(async (request, response) => {
         activeScrape = null;
       }
     }
-    const agentResponse = await callLocalModel({ userMessage, history, scrapePlan, scrapeResult });
+    const agentResponse = scrapeResult
+      ? buildDeterministicTravelResponse({ userMessage, scrapePlan, scrapeResult })
+      : await callLocalModel({ userMessage, history, scrapePlan, scrapeResult });
     return sendJson(response, 200, normalizeAgentResponse(agentResponse));
   } catch (error) {
     return sendJson(response, 500, {
@@ -153,42 +156,51 @@ async function callLocalModel({ userMessage, history, scrapePlan, scrapeResult }
     ? buildLiveScrapeContext({ scrapePlan, scrapeResult })
     : "No live scraper command was run for this request. If the user asked for live prices without a supported destination, ask for one destination or cruise port.";
 
-  const response = await fetch(`${MODEL_BASE_URL}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${MODEL_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      temperature: 0.3,
-      max_tokens: 1800,
-      messages: [
-        {
-          role: "system",
-          content: [
-            "You are TravelDash AI, a private travel planning agent.",
-            "Only answer travel tasks: hotels, flights, destinations, restaurants, attractions, weather, itineraries, trip research, comparisons, recommendations, and travel package updates.",
-            "Do not perform shell, admin, system, config, credential, or unrelated OpenClaw tasks.",
-            "For city flight and hotel requests, Google Flights and Google Hotels are the first check. Kayak is only the second check/fallback.",
-            "When live scraper results are provided, use them as the primary source. Mention that prices and availability can change before booking.",
-            "If a request mentions multiple destinations, explain that TravelDash runs one destination at a time and only summarize the destination that was scraped.",
-            "Return strict JSON only with shape: {\"answer\":\"...\",\"cards\":[{\"type\":\"hotel|flight|deal|restaurant|attraction|weather|itinerary\",\"title\":\"...\",\"subtitle\":\"...\",\"imageUrl\":\"\",\"price\":\"\",\"rating\":\"\",\"details\":\"...\",\"provider\":\"...\",\"url\":\"https://...\",\"actionLabel\":\"View Deal\"}]}",
-            "Use cards for concrete options. If live prices are not verified, say they need verification.",
-          ].join(" "),
-        },
-        {
-          role: "system",
-          content: liveContext,
-        },
-        ...history.slice(-10).map((message) => ({
-          role: message.role === "assistant" ? "assistant" : "user",
-          content: String(message.content || ""),
-        })),
-        { role: "user", content: userMessage },
-      ],
-    }),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), MODEL_TIMEOUT_MS);
+
+  let response;
+  try {
+    response = await fetch(`${MODEL_BASE_URL}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${MODEL_API_KEY}`,
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: MODEL,
+        temperature: 0.3,
+        max_tokens: 1800,
+        messages: [
+          {
+            role: "system",
+            content: [
+              "You are TravelDash AI, a private travel planning agent.",
+              "Only answer travel tasks: hotels, flights, destinations, restaurants, attractions, weather, itineraries, trip research, comparisons, recommendations, and travel package updates.",
+              "Do not perform shell, admin, system, config, credential, or unrelated OpenClaw tasks.",
+              "For city flight and hotel requests, Google Flights and Google Hotels are the first check. Kayak is only the second check/fallback.",
+              "When live scraper results are provided, use them as the primary source. Mention that prices and availability can change before booking.",
+              "If a request mentions multiple destinations, explain that TravelDash runs one destination at a time and only summarize the destination that was scraped.",
+              "Return strict JSON only with shape: {\"answer\":\"...\",\"cards\":[{\"type\":\"hotel|flight|deal|restaurant|attraction|weather|itinerary\",\"title\":\"...\",\"subtitle\":\"...\",\"imageUrl\":\"\",\"price\":\"\",\"rating\":\"\",\"details\":\"...\",\"provider\":\"...\",\"url\":\"https://...\",\"actionLabel\":\"View Deal\"}]}",
+              "Use cards for concrete options. If live prices are not verified, say they need verification.",
+            ].join(" "),
+          },
+          {
+            role: "system",
+            content: liveContext,
+          },
+          ...history.slice(-10).map((message) => ({
+            role: message.role === "assistant" ? "assistant" : "user",
+            content: String(message.content || ""),
+          })),
+          { role: "user", content: userMessage },
+        ],
+      }),
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!response.ok) throw new Error(`Local model returned HTTP ${response.status}`);
   const json = await response.json();
@@ -637,6 +649,105 @@ function normalizeAgentResponse(value) {
   };
 }
 
+function buildDeterministicTravelResponse({ userMessage, scrapePlan, scrapeResult }) {
+  const result = scrapeResult.resultJson;
+  const cards = buildCardsFromScrapeResult(result);
+  const resultFile = scrapeResult.savedPath ? `\n\nResult file: ${scrapeResult.savedPath}` : "";
+  const caveat = "Prices and availability can change before checkout.";
+
+  if (scrapeResult.error && !cards.length) {
+    return {
+      answer: `I ran the TravelDash live search for ${scrapePlan?.label || "that trip"}, but it did not return usable deal rows. ${scrapeResult.error}${resultFile}`,
+      cards: [],
+    };
+  }
+
+  if (cards.length) {
+    const flightCards = cards.filter((card) => card.type === "flight");
+    const hotelCards = cards.filter((card) => card.type === "hotel");
+    const bestFlight = flightCards[0]?.price ? ` Best flight found: ${flightCards[0].price}.` : "";
+    const bestHotel = hotelCards[0]?.price ? ` Best hotel rate found: ${hotelCards[0].price}.` : "";
+
+    return {
+      answer: `I ran the TravelDash live search for ${scrapePlan?.label || userMessage}.${bestFlight}${bestHotel} ${caveat}${resultFile}`,
+      cards,
+    };
+  }
+
+  return {
+    answer: `I ran the TravelDash live search for ${scrapePlan?.label || userMessage}, but the result file did not include displayable deal rows yet. ${caveat}${resultFile}`,
+    cards: [],
+  };
+}
+
+function buildCardsFromScrapeResult(value) {
+  if (value?.source === "google_trip") {
+    const flightUrl = textValue(value.flight?.url);
+    const hotelUrl = textValue(value.hotel?.url);
+    const flights = Array.isArray(value.flight?.deals)
+      ? value.flight.deals.slice(0, 4).map((deal) => ({
+          type: "flight",
+          title: textValue(deal.airline) || "Flight option",
+          subtitle: `${value.origin || "DFW"} to ${value.airport || value.city || "destination"}`,
+          price: priceValue(deal.price),
+          provider: "Google Flights",
+          details: trimText(deal.snippet || `${deal.nonstop ? "Nonstop" : `${deal.stops ?? "Unknown"} stop`} flight option.`, 500),
+          url: flightUrl,
+          actionLabel: "View Flights",
+        }))
+      : [];
+
+    const hotels = Array.isArray(value.hotel?.hotels)
+      ? value.hotel.hotels.slice(0, 4).map((hotel) => ({
+          type: "hotel",
+          title: textValue(hotel.name) || "Hotel option",
+          subtitle: `${value.city || "Destination"} hotel`,
+          price: hotel.price_per_night ? `$${hotel.price_per_night}/night` : undefined,
+          provider: "Google Hotels",
+          details: hotel.price_per_night
+            ? `$${hotel.price_per_night}/night before final checkout taxes and fees.`
+            : "Hotel rate found in Google Hotels.",
+          url: hotelUrl,
+          actionLabel: "View Hotels",
+        }))
+        .filter((hotel) => hotel.title && !/accessibility feedback/i.test(hotel.title))
+      : [];
+
+    return [...flights, ...hotels].filter((card) => card.title).slice(0, 8);
+  }
+
+  const items = Array.isArray(value) ? value : Array.isArray(value?.results) ? value.results : [];
+  return items.flatMap((item) => {
+    if (Array.isArray(item?.deals) && item.deals.length) {
+      return item.deals.slice(0, 4).map((deal) => ({
+        type: normalizeCardType(item.type),
+        title: textValue(deal.title) || textValue(item.title) || "Travel deal",
+        subtitle: textValue(item.label),
+        price: textValue(deal.price),
+        provider: textValue(deal.provider || deal.airline || item.site),
+        details: trimText(deal.details || deal.description || deal.snippet || deal.text, 500),
+        url: textValue(deal.url || item.url || item.finalUrl),
+        actionLabel: "View Deal",
+      }));
+    }
+
+    return [{
+      type: normalizeCardType(item?.type),
+      title: textValue(item?.title) || textValue(item?.label) || "Travel result",
+      subtitle: textValue(item?.site),
+      provider: textValue(item?.site),
+      details: trimText(item?.details || item?.description || item?.content || item?.snippet, 500),
+      url: textValue(item?.url || item?.finalUrl),
+      actionLabel: "View Deal",
+    }];
+  }).filter((card) => card.title).slice(0, 8);
+}
+
+function normalizeCardType(value) {
+  const type = textValue(value);
+  return ["hotel", "flight", "deal", "restaurant", "attraction", "weather", "itinerary"].includes(type) ? type : "deal";
+}
+
 function normalizeCard(card) {
   if (!card || typeof card !== "object") return null;
   const title = textValue(card.title);
@@ -657,7 +768,16 @@ function normalizeCard(card) {
 }
 
 function textValue(value) {
-  return typeof value === "string" ? value.trim() : undefined;
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return undefined;
+}
+
+function priceValue(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return `$${value}`;
+  const text = textValue(value);
+  if (!text) return undefined;
+  return /^\d+(?:\.\d+)?$/.test(text) ? `$${text}` : text;
 }
 
 function parseJsonish(content) {

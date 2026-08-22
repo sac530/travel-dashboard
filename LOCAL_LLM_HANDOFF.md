@@ -13,6 +13,7 @@ Use this file as the first stop for smaller/local models. The job is not to rede
 - Data client: `lib/supabase.ts`.
 - Data helpers: `lib/api.ts`.
 - Package cards: `components/PackageGrid.tsx`.
+- Master calendar: `MASTER_CALENDAR.md` plus `data/master-calendar.json`, rendered by `components/MasterCalendar.tsx`.
 - Intake form: `components/IntakeSection.tsx`, writes pending rows to `intake_submissions`.
 - Upload form: `components/UploadSection.tsx`, writes rows to `manual_uploads`.
 - Scraper engine: `D:\OpenClaw\TravelScraper`.
@@ -51,6 +52,21 @@ node src\index.js test
 ```
 
 One destination per run. Do not batch several cities in one prompt or one long local-model context. Finish one intake row, write the package/deals/extras, then move to the next row.
+
+## Master Calendar Rule
+
+When checking, researching, scraping, comparing, or refreshing any destination or route, add a brief entry to `MASTER_CALENDAR.md` and mirror it in `data/master-calendar.json`.
+
+Use the existing color categories:
+
+- `destination`: US city package checks.
+- `international`: international package checks.
+- `cruise`: cruise port and sailing checks.
+- `research`: exploratory destination, route, provider, or booking research.
+- `follow-up`: retry, decision, or future check needed.
+- `note`: setup/context entries.
+
+Keep descriptions short and useful: what was checked, where results came from, and the next action if one exists.
 
 ## Safe Editing Rules
 
