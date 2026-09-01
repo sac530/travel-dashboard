@@ -1,15 +1,64 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Plane, Hotel, Car, AlertTriangle } from "lucide-react";
+import { getActivePackages, getDealsByPackage } from "@/lib/api";
 
-const stats = [
-  { icon: Plane, label: "Active Packages", value: "3", color: "text-sky-300" },
-  { icon: Hotel, label: "Total Deals Found", value: "12", color: "text-orange-300" },
-  { icon: Car, label: "Avg. Savings", value: "$340", color: "text-emerald-300" },
-  { icon: AlertTriangle, label: "Expiring Soon", value: "1", color: "text-orange-400" },
-];
+type Stat = {
+  icon: typeof Plane;
+  label: string;
+  value: string;
+  color: string;
+};
 
 export default function StatsBar() {
+  const [stats, setStats] = useState<Stat[]>([
+    { icon: Plane, label: "Active Packages", value: "-", color: "text-sky-300" },
+    { icon: Hotel, label: "Total Deals Found", value: "-", color: "text-orange-300" },
+    { icon: Car, label: "Best Package", value: "-", color: "text-emerald-300" },
+    { icon: AlertTriangle, label: "Expiring Soon", value: "-", color: "text-orange-400" },
+  ]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadStats() {
+      const activePackages = await getActivePackages();
+      const dealGroups = await Promise.all(activePackages.map((pkg) => getDealsByPackage(pkg.id)));
+      const deals = dealGroups.flat();
+      const now = Date.now();
+      const expiringSoon = activePackages.filter((pkg) => {
+        const days = Math.ceil((new Date(pkg.expires_at).getTime() - now) / 86400000);
+        return days > 0 && days <= 3;
+      }).length;
+      const bestPackage = activePackages
+        .filter((pkg) => Number(pkg.total_price || 0) > 0)
+        .sort((a, b) => Number(a.total_price || 0) - Number(b.total_price || 0))[0];
+
+      if (cancelled) return;
+      setStats([
+        { icon: Plane, label: "Active Packages", value: String(activePackages.length), color: "text-sky-300" },
+        { icon: Hotel, label: "Total Deals Found", value: String(deals.length), color: "text-orange-300" },
+        { icon: Car, label: "Best Package", value: formatMoney(bestPackage?.total_price), color: "text-emerald-300" },
+        { icon: AlertTriangle, label: "Expiring Soon", value: String(expiringSoon), color: "text-orange-400" },
+      ]);
+    }
+
+    loadStats().catch(() => {
+      if (cancelled) return;
+      setStats([
+        { icon: Plane, label: "Active Packages", value: "?", color: "text-sky-300" },
+        { icon: Hotel, label: "Total Deals Found", value: "?", color: "text-orange-300" },
+        { icon: Car, label: "Best Package", value: "?", color: "text-emerald-300" },
+        { icon: AlertTriangle, label: "Expiring Soon", value: "?", color: "text-orange-400" },
+      ]);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div className="mb-12 grid grid-cols-2 gap-4 lg:grid-cols-4">
       {stats.map((stat) => (
@@ -21,4 +70,10 @@ export default function StatsBar() {
       ))}
     </div>
   );
+}
+
+function formatMoney(value?: number | string | null) {
+  const numeric = Number(value || 0);
+  if (!numeric) return "TBD";
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(numeric);
 }

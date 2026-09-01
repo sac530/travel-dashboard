@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import type { ComponentType } from "react";
 import {
   AlertTriangle,
@@ -19,121 +19,6 @@ import {
 } from "lucide-react";
 import { getActivePackages, getDealsByPackage, getExtrasByPackage, requestPackageRenewal } from "@/lib/api";
 import type { Deal, Extra, Package } from "@/lib/supabase";
-
-const SAMPLE_PACKAGES: Package[] = [
-  {
-    id: "sample-cancun",
-    title: "Cancun All-Inclusive Escape",
-    destination: "Cancun, Mexico",
-    origin: "DFW",
-    start_date: "2026-09-15",
-    end_date: "2026-09-22",
-    total_price: 1847,
-    status: "active",
-    created_at: new Date().toISOString(),
-    expires_at: new Date(Date.now() + 5 * 86400000).toISOString(),
-    notes: "Sample package shown when Supabase has no active packages.",
-    user_created: false,
-  },
-  {
-    id: "sample-paris",
-    title: "Paris Rail + Boutique Hotel",
-    destination: "Paris, France",
-    origin: "JFK",
-    start_date: "2026-10-01",
-    end_date: "2026-10-08",
-    total_price: 2340,
-    status: "active",
-    created_at: new Date().toISOString(),
-    expires_at: new Date(Date.now() + 6 * 86400000).toISOString(),
-    notes: null,
-    user_created: false,
-  },
-  {
-    id: "sample-miami",
-    title: "Miami Beach Weekend",
-    destination: "Miami, FL",
-    origin: "ATL",
-    start_date: "2026-08-22",
-    end_date: "2026-08-24",
-    total_price: 895,
-    status: "active",
-    created_at: new Date().toISOString(),
-    expires_at: new Date(Date.now() + 2 * 86400000).toISOString(),
-    notes: null,
-    user_created: false,
-  },
-];
-
-const SAMPLE_DEALS: Deal[] = [
-  {
-    id: "d1",
-    package_id: "sample-cancun",
-    deal_type: "flight",
-    provider: "United Airlines",
-    title: "DFW to CUN roundtrip",
-    description: "Nonstop, carry-on included, morning departure.",
-    price: 347,
-    original_price: 489,
-    order_url: "https://www.google.com/travel/flights",
-    rating: 4.2,
-    booking_details: {},
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: "d2",
-    package_id: "sample-cancun",
-    deal_type: "hotel",
-    provider: "Booking.com",
-    title: "Hyatt Ziva Cancun all-inclusive",
-    description: "Ocean view room, meals and drinks included, beachfront pool.",
-    price: 1200,
-    original_price: 1680,
-    order_url: "https://www.booking.com",
-    rating: 4.7,
-    booking_details: {},
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: "d3",
-    package_id: "sample-cancun",
-    deal_type: "car",
-    provider: "Hertz",
-    title: "Compact car at Cancun airport",
-    description: "Unlimited mileage, full-to-full fuel policy.",
-    price: 189,
-    original_price: null,
-    order_url: "https://www.hertz.com",
-    rating: 4,
-    booking_details: {},
-    created_at: new Date().toISOString(),
-  },
-];
-
-const SAMPLE_EXTRAS: Extra[] = [
-  {
-    id: "e1",
-    package_id: "sample-cancun",
-    category: "beach",
-    name: "Reef-safe sunscreen",
-    description: "Good fit for beach trips and excursions.",
-    estimated_price: 18,
-    suggested_url: "https://www.amazon.com",
-    purchased: false,
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: "e2",
-    package_id: "sample-cancun",
-    category: "safety",
-    name: "Travel insurance",
-    description: "Trip cancellation, medical coverage, baggage delay.",
-    estimated_price: 89,
-    suggested_url: "https://www.squaremouth.com",
-    purchased: false,
-    created_at: new Date().toISOString(),
-  },
-];
 
 const DEST_IMAGES = [
   "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=1000&q=80",
@@ -167,7 +52,8 @@ export default function PackageGrid({
   const [packages, setPackages] = useState<Package[]>([]);
   const [details, setDetails] = useState<Record<string, PackageDetails>>({});
   const [selectedPackage, setSelectedPackage] = useState<Package | null>(null);
-  const [loadState, setLoadState] = useState<"loading" | "ready" | "sample" | "error">("loading");
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
+  const [autoRefreshNote, setAutoRefreshNote] = useState("");
   const [error, setError] = useState("");
   const [renewingPackageId, setRenewingPackageId] = useState<string | null>(null);
   const [renewedPackageIds, setRenewedPackageIds] = useState<Set<string>>(new Set());
@@ -178,9 +64,9 @@ export default function PackageGrid({
     try {
       const active = await getActivePackages();
       if (!active.length) {
-        setPackages(SAMPLE_PACKAGES);
-        setDetails({ "sample-cancun": { deals: SAMPLE_DEALS, extras: SAMPLE_EXTRAS } });
-        setLoadState("sample");
+        setPackages([]);
+        setDetails({});
+        setLoadState("ready");
         return;
       }
 
@@ -195,8 +81,8 @@ export default function PackageGrid({
       setDetails(nextDetails);
       setLoadState("ready");
     } catch (err) {
-      setPackages(SAMPLE_PACKAGES);
-      setDetails({ "sample-cancun": { deals: SAMPLE_DEALS, extras: SAMPLE_EXTRAS } });
+      setPackages([]);
+      setDetails({});
       setLoadState("error");
       setError(err instanceof Error ? err.message : "Could not load Supabase packages.");
     }
@@ -208,6 +94,55 @@ export default function PackageGrid({
     }, 0);
     return () => window.clearTimeout(timer);
   }, [loadPackages]);
+
+  // Auto-refresh: if every package is expired (or none exist), automatically
+  // queue a renewal for each so the background agent re-scrapes them. The grid
+  // shows an honest empty/queued state - never sample cards.
+  const autoRefreshStartedRef = React.useRef(false);
+  useEffect(() => {
+    if (loadState !== "ready" || autoRefreshStartedRef.current) return;
+    const now = Date.now();
+    const expiredPackages = packages.filter((pkg) => new Date(pkg.expires_at).getTime() <= now && pkg.status === "active");
+    const allExpired = packages.length > 0 && expiredPackages.length >= packages.length;
+    if (packages.length === 0 || allExpired) {
+      autoRefreshStartedRef.current = true;
+      setAutoRefreshNote(
+        packages.length === 0
+          ? "No packages yet - auto-refresh is starting for the next 1-2 months of travel."
+          : `${expiredPackages.length} package(s) expired - auto-refresh queued for the next 1-2 months. New cards will appear automatically.`,
+      );
+      (async () => {
+        let queued = 0;
+        for (const pkg of expiredPackages) {
+          try {
+            await requestPackageRenewal(pkg, details[pkg.id]?.deals || []);
+            queued += 1;
+          } catch {
+            // keep going - one failure should not block the rest
+          }
+        }
+        if (queued > 0) {
+          setPackages((current) => current.map((item) => (expiredPackages.some((e) => e.id === item.id) ? { ...item, status: "refresh_requested" as const } : item)));
+        }
+        // Poll for fresh active packages for up to 15 minutes so the grid
+        // updates automatically when the agent finishes the refresh.
+        const startedAt = Date.now();
+        while (Date.now() - startedAt < 15 * 60 * 1000) {
+          await new Promise((resolve) => setTimeout(resolve, 60_000));
+          try {
+            const fresh = await getActivePackages();
+            if (fresh.some((p) => p.status === "active")) {
+              setAutoRefreshNote("");
+              void loadPackages();
+              return;
+            }
+          } catch {
+            // ignore polling errors
+          }
+        }
+      })();
+    }
+  }, [loadState, packages, details]);
 
   const activeDetails = selectedPackage ? details[selectedPackage.id] || { deals: [], extras: [] } : null;
 
@@ -259,10 +194,8 @@ export default function PackageGrid({
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold text-white">Active Packages</h2>
-          {loadState === "sample" && (
-            <p className="mt-1 text-sm text-amber-200">Showing sample cards because Supabase has no active packages yet.</p>
-          )}
-          {loadState === "error" && <p className="mt-1 text-sm text-rose-200">Supabase fallback active: {error}</p>}
+          {autoRefreshNote && <p className="mt-1 text-sm text-sky-200">{autoRefreshNote}</p>}
+          {loadState === "error" && <p className="mt-1 text-sm text-rose-200">Could not load packages: {error}</p>}
         </div>
         <div className="flex gap-2">
           <button
@@ -284,9 +217,27 @@ export default function PackageGrid({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {packages.map((pkg, index) => {
+      {packages.length === 0 ? (
+        <div className="glass-card flex flex-col items-center justify-center gap-3 p-12 text-center">
+          <RefreshCw className="h-8 w-8 animate-spin text-sky-300" />
+          <h3 className="text-lg font-semibold text-white">No packages yet</h3>
+          <p className="max-w-md text-sm text-slate-400">
+            Auto-refresh is running. Fresh packages for the next 1-2 months will appear here automatically - no samples, real deals only.
+          </p>
+          <button
+            type="button"
+            onClick={onOpenIntake}
+            className="mt-2 flex items-center gap-2 rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-400"
+          >
+            <Plus className="h-4 w-4" />
+            Request a destination
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {packages.map((pkg, index) => {
           const packageDeals = details[pkg.id]?.deals || [];
+          const primaryDealUrl = findPrimaryDealUrl(packageDeals);
           const isExpired = getDaysRemaining(pkg.expires_at, REFERENCE_NOW) <= 0;
           const renewalQueued = pkg.status === "refresh_requested" || renewedPackageIds.has(pkg.id);
 
@@ -339,6 +290,18 @@ export default function PackageGrid({
                     )}
                   </div>
                 </div>
+                {primaryDealUrl && (
+                  <a
+                    href={primaryDealUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-400"
+                    title="Open the best available booking link for this package"
+                  >
+                    Book package
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
+                )}
                 <div className="mt-4 flex flex-wrap gap-2">
                   <DealBadge icon={Plane} label="Flight" url={findDealUrl(packageDeals, "flight")} />
                   <DealBadge icon={Hotel} label="Hotel" url={findDealUrl(packageDeals, "hotel")} />
@@ -346,9 +309,10 @@ export default function PackageGrid({
                 </div>
               </div>
             </article>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }
@@ -453,16 +417,7 @@ function PackageDetail({
         {extras.length ? (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {extras.map((extra) => (
-              <div key={extra.id} className="rounded-lg border border-white/10 bg-white/5 p-4">
-                <div className="flex items-start gap-3">
-                  <CheckCircle2 className={`mt-0.5 h-5 w-5 ${extra.purchased ? "text-emerald-300" : "text-slate-600"}`} />
-                  <div className="min-w-0 flex-1">
-                    <h4 className="font-semibold text-white">{extra.name}</h4>
-                    {extra.description && <p className="mt-1 text-sm text-slate-400">{extra.description}</p>}
-                    <p className="mt-2 text-sm font-medium text-sky-200">{formatMoney(extra.estimated_price)}</p>
-                  </div>
-                </div>
-              </div>
+              <ExtraCard key={extra.id} extra={extra} />
             ))}
           </div>
         ) : (
@@ -500,10 +455,42 @@ function PackageDetail({
   );
 }
 
+function ExtraCard({ extra }: { extra: Extra }) {
+  const content = (
+    <div className="flex items-start gap-3">
+      <CheckCircle2 className={`mt-0.5 h-5 w-5 ${extra.purchased ? "text-emerald-300" : "text-slate-600"}`} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start justify-between gap-3">
+          <h4 className="font-semibold text-white">{extra.name}</h4>
+          {extra.suggested_url && <ExternalLink className="mt-1 h-3.5 w-3.5 shrink-0 text-slate-500" />}
+        </div>
+        {extra.description && <p className="mt-1 text-sm text-slate-400">{extra.description}</p>}
+        <p className="mt-2 text-sm font-medium text-sky-200">{formatMoney(extra.estimated_price)}</p>
+      </div>
+    </div>
+  );
+
+  if (extra.suggested_url) {
+    return (
+      <a
+        href={extra.suggested_url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block rounded-lg border border-white/10 bg-white/5 p-4 transition hover:border-sky-300/40 hover:bg-white/8"
+        title={`Open purchase link for ${extra.name}`}
+      >
+        {content}
+      </a>
+    );
+  }
+
+  return <div className="rounded-lg border border-white/10 bg-white/5 p-4">{content}</div>;
+}
+
 function DealCard({ deal }: { deal: Deal }) {
   const savings = deal.original_price ? Number(deal.original_price) - Number(deal.price) : 0;
-  return (
-    <div className="rounded-lg border border-white/10 bg-white/5 p-5 shadow-lg shadow-black/10 transition hover:border-white/20">
+  const content = (showAction: boolean) => (
+    <>
       {savings > 0 && (
         <div className="mb-2 inline-flex rounded-full bg-emerald-400/10 px-2.5 py-1 text-xs font-semibold text-emerald-200">
           Save {formatMoney(savings)}
@@ -523,7 +510,7 @@ function DealCard({ deal }: { deal: Deal }) {
             {deal.rating}
           </span>
         )}
-        {deal.order_url && (
+        {showAction && deal.order_url && (
           <a
             href={deal.order_url}
             target="_blank"
@@ -535,6 +522,30 @@ function DealCard({ deal }: { deal: Deal }) {
           </a>
         )}
       </div>
+    </>
+  );
+
+  if (deal.order_url) {
+    return (
+      <a
+        href={deal.order_url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block rounded-lg border border-white/10 bg-white/5 p-5 shadow-lg shadow-black/10 transition hover:border-sky-300/40 hover:bg-white/8"
+        title={`Open booking link for ${deal.title}`}
+      >
+        {content(false)}
+        <span className="mt-4 inline-flex items-center gap-1 rounded-md bg-sky-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-sky-400">
+          Open
+          <ExternalLink className="h-3.5 w-3.5" />
+        </span>
+      </a>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-white/5 p-5 shadow-lg shadow-black/10 transition hover:border-white/20">
+      {content(true)}
     </div>
   );
 }
@@ -614,6 +625,16 @@ function DealBadge({
 
 function findDealUrl(deals: Deal[], type: Deal["deal_type"]) {
   return deals.find((deal) => deal.deal_type === type && deal.order_url)?.order_url || null;
+}
+
+function findPrimaryDealUrl(deals: Deal[]) {
+  return (
+    findDealUrl(deals, "flight") ||
+    findDealUrl(deals, "hotel") ||
+    findDealUrl(deals, "car") ||
+    deals.find((deal) => deal.order_url)?.order_url ||
+    null
+  );
 }
 
 function formatMoney(value?: number | string | null) {

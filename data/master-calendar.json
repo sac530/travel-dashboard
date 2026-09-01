@@ -115,5 +115,23 @@
     "title": "Intake check - no pending, 4 packages expired",
     "description": "0 pending, 0 processing intake submissions. Marked 4 expired packages as expired (Miami Beach Weekend, Paris Rail, Cancun All-Inclusive, AL Gulf Coast). 3 active packages remain (2x Miami, 1x Seattle).",
     "source": "Cron travel-dashboard-intake-check"
+  },
+  {
+    "id": "2026-08-26-note-traveldash-intake-check-0533pm",
+    "date": "2026-08-26",
+    "destination": "TravelDash",
+    "category": "note",
+    "title": "Intake check 5:33 PM CDT",
+    "description": "0 pending intake_submissions, 0 processing (live Supabase check); 0 unparsed manual uploads. 4 intake rows (3 completed, 1 archived). No active packages (all 11 expired). No package/deal/extra rows created. Google-first source order in effect.",
+    "source": "Cron travel-dashboard-intake-check"
+  },
+  {
+    "id": "2026-08-26-note-traveldash-intake-check-0733pm",
+    "date": "2026-08-26",
+    "destination": "TravelDash",
+    "category": "note",
+    "title": "Intake check 7:33 PM CDT",
+    "description": "0 pending intake_submissions, 0 processing (live Supabase check); 0 unparsed manual uploads. 4 intake rows (3 completed, 1 archived). No active packages (all 11 expired). No package/deal/extra rows created. Google-first source order in effect.",
+    "source": "Cron travel-dashboard-intake-check"
   }
 ]

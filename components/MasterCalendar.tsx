@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CalendarDays, ChevronLeft, ChevronRight, Compass, FileText, Ship, Sparkles } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Compass, ExternalLink, FileText, Ship, Sparkles } from "lucide-react";
 import calendarEntries from "@/data/master-calendar.json";
 
 type CalendarCategory = "destination" | "international" | "cruise" | "research" | "follow-up" | "note";
@@ -16,7 +16,19 @@ type CalendarEntry = {
   source?: string;
 };
 
-const entries = calendarEntries as CalendarEntry[];
+const entries = (calendarEntries as Partial<CalendarEntry>[])
+  .filter((entry): entry is Partial<CalendarEntry> & Pick<CalendarEntry, "date" | "title" | "description"> =>
+    Boolean(entry.date && entry.title && entry.description),
+  )
+  .map((entry, index) => ({
+    id: entry.id || `${entry.date}-${entry.title}-${index}`.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+    date: entry.date,
+    destination: entry.destination || "TravelDash",
+    category: entry.category || "note",
+    title: entry.title,
+    description: entry.description,
+    source: entry.source,
+  })) as CalendarEntry[];
 
 const categoryStyles: Record<CalendarCategory, { label: string; dot: string; pill: string; icon: typeof Compass }> = {
   destination: {
@@ -58,7 +70,7 @@ const categoryStyles: Record<CalendarCategory, { label: string; dot: string; pil
 };
 
 export default function MasterCalendar() {
-  const initialMonth = getMonthStart(entries[0]?.date || new Date().toISOString());
+  const initialMonth = getMonthStart(getInitialCalendarDate(entries));
   const [visibleMonth, setVisibleMonth] = useState(initialMonth);
 
   const entriesByDate = useMemo(() => {
@@ -70,8 +82,15 @@ export default function MasterCalendar() {
 
   const monthDays = useMemo(() => buildCalendarDays(visibleMonth), [visibleMonth]);
   const visibleEntries = useMemo(
-    () => entries.filter((entry) => entry.date.startsWith(formatMonthKey(visibleMonth))),
+    () =>
+      entries
+        .filter((entry) => entry.date.startsWith(formatMonthKey(visibleMonth)))
+        .sort((a, b) => b.date.localeCompare(a.date) || b.title.localeCompare(a.title)),
     [visibleMonth],
+  );
+  const latestEntries = useMemo(
+    () => [...entries].sort((a, b) => b.date.localeCompare(a.date) || b.title.localeCompare(a.title)).slice(0, 6),
+    [],
   );
 
   function shiftMonth(offset: number) {
@@ -137,13 +156,34 @@ export default function MasterCalendar() {
                   <div className="space-y-1">
                     {dayEntries.slice(0, 3).map((entry) => {
                       const style = categoryStyles[entry.category];
-                      return (
-                        <div key={entry.id} className="rounded-md bg-black/22 px-2 py-1">
+                      const entryUrl = getEntryUrl(entry);
+                      const entryContent = (
+                        <>
                           <div className="flex items-center gap-1.5">
                             <span className={`h-2 w-2 shrink-0 rounded-full ${style.dot}`} />
                             <span className="truncate text-xs font-medium text-white">{entry.destination}</span>
+                            {entryUrl && <ExternalLink className="h-3 w-3 shrink-0 text-slate-500" />}
                           </div>
                           <p className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-slate-400">{entry.title}</p>
+                        </>
+                      );
+                      if (entryUrl) {
+                        return (
+                          <a
+                            key={entry.id}
+                            href={entryUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block rounded-md bg-black/22 px-2 py-1 transition hover:bg-sky-400/15"
+                            title={`Open booking search for ${entry.destination}`}
+                          >
+                            {entryContent}
+                          </a>
+                        );
+                      }
+                      return (
+                        <div key={entry.id} className="rounded-md bg-black/22 px-2 py-1">
+                          {entryContent}
                         </div>
                       );
                     })}
@@ -155,6 +195,50 @@ export default function MasterCalendar() {
         </div>
 
         <aside className="space-y-4">
+          <div className="glass-card p-5">
+            <h2 className="text-lg font-bold text-white">Latest Updates</h2>
+            <div className="mt-4 space-y-3">
+              {latestEntries.map((entry) => {
+                const style = categoryStyles[entry.category];
+                const entryUrl = getEntryUrl(entry);
+                const content = (
+                  <div className="flex items-start gap-3">
+                    <span className={`mt-1 h-3 w-3 shrink-0 rounded-full ${style.dot}`} title={style.label} />
+                    <div className="min-w-0">
+                      <div className="flex items-start gap-2">
+                        <p className="text-sm font-semibold text-white">{entry.title}</p>
+                        {entryUrl && <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500" />}
+                      </div>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {formatReadableDate(entry.date)} - {entry.destination}
+                      </p>
+                      <p className="mt-2 line-clamp-3 text-sm leading-5 text-slate-400">{entry.description}</p>
+                    </div>
+                  </div>
+                );
+                if (entryUrl) {
+                  return (
+                    <a
+                      key={entry.id}
+                      href={entryUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block rounded-lg border border-white/10 bg-white/5 p-3 transition hover:border-sky-300/40 hover:bg-white/8"
+                      title={`Open booking search for ${entry.destination}`}
+                    >
+                      {content}
+                    </a>
+                  );
+                }
+                return (
+                  <article key={entry.id} className="rounded-lg border border-white/10 bg-white/5 p-3">
+                    {content}
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+
           <div className="glass-card p-5">
             <h2 className="text-lg font-bold text-white">Legend</h2>
             <div className="mt-4 flex flex-wrap gap-2">
@@ -176,11 +260,15 @@ export default function MasterCalendar() {
               {visibleEntries.length ? (
                 visibleEntries.map((entry) => {
                   const style = categoryStyles[entry.category];
-                  return (
-                    <article key={entry.id} className="rounded-lg border border-white/10 bg-white/5 p-3">
+                  const entryUrl = getEntryUrl(entry);
+                  const content = (
+                    <>
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="text-sm font-semibold text-white">{entry.title}</p>
+                          <div className="flex items-start gap-2">
+                            <p className="text-sm font-semibold text-white">{entry.title}</p>
+                            {entryUrl && <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500" />}
+                          </div>
                           <p className="mt-1 text-xs text-slate-500">
                             {formatReadableDate(entry.date)} - {entry.destination}
                           </p>
@@ -188,7 +276,26 @@ export default function MasterCalendar() {
                         <span className={`h-3 w-3 shrink-0 rounded-full ${style.dot}`} title={style.label} />
                       </div>
                       <p className="mt-2 text-sm leading-5 text-slate-400">{entry.description}</p>
-                      {entry.source && <p className="mt-2 text-xs text-slate-600">Source: {entry.source}</p>}
+                      {entry.source && <p className="mt-2 break-words text-xs text-slate-600">Source: {entry.source}</p>}
+                    </>
+                  );
+                  if (entryUrl) {
+                    return (
+                      <a
+                        key={entry.id}
+                        href={entryUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block rounded-lg border border-white/10 bg-white/5 p-3 transition hover:border-sky-300/40 hover:bg-white/8"
+                        title={`Open booking search for ${entry.destination}`}
+                      >
+                        {content}
+                      </a>
+                    );
+                  }
+                  return (
+                    <article key={entry.id} className="rounded-lg border border-white/10 bg-white/5 p-3">
+                      {content}
                     </article>
                   );
                 })
@@ -210,6 +317,12 @@ function getMonthStart(value: string) {
   return new Date(date.getFullYear(), date.getMonth(), 1);
 }
 
+function getInitialCalendarDate(items: CalendarEntry[]) {
+  const today = formatDateKey(new Date());
+  const latestPastOrToday = [...items].filter((entry) => entry.date <= today).sort((a, b) => b.date.localeCompare(a.date))[0];
+  return latestPastOrToday?.date || [...items].sort((a, b) => b.date.localeCompare(a.date))[0]?.date || new Date().toISOString();
+}
+
 function buildCalendarDays(monthStart: Date) {
   const first = new Date(monthStart);
   const gridStart = new Date(first);
@@ -228,6 +341,22 @@ function formatDateKey(date: Date) {
 
 function formatMonthKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function getEntryUrl(entry: CalendarEntry) {
+  if (entry.source && isHttpUrl(entry.source)) return entry.source;
+  if (entry.destination.toLowerCase() === "traveldash" && entry.category === "note") return null;
+
+  const topic =
+    entry.category === "cruise"
+      ? `${entry.destination} cruise deals ${entry.title}`
+      : `${entry.destination} travel booking deals ${entry.title}`;
+
+  return `https://www.google.com/search?q=${encodeURIComponent(topic)}`;
+}
+
+function isHttpUrl(value: string) {
+  return /^https?:\/\//i.test(value.trim());
 }
 
 function formatReadableDate(value: string) {

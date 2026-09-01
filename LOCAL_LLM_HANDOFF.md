@@ -29,7 +29,7 @@ Run `sup_schema.sql` if tables are missing. The app expects these tables:
 - `manual_uploads`
 - `intake_submissions`
 
-If Supabase has no active packages, the dashboard intentionally shows sample travel cards so the UI still works.
+If Supabase has no active packages, the dashboard shows a clean empty state ("No packages yet") and automatically queues an auto-refresh. It NEVER shows sample cards (removed 2026-08-31 per Boss).
 
 ## Local Commands
 
@@ -95,14 +95,23 @@ A pending intake row should become a package like this:
 
 For manual uploads, read `manual_uploads` where `parsed = false`, extract provider, destination, dates, price, and URL from `content` plus `caption`, then attach it to an existing package or create a new intake row.
 
+## Source Order (set by Boss, 2026-08-23)
+
+For city packages and refreshes:
+
+1. Google Flights + Google Hotels first (use `D:\OpenClaw\TravelScraper\src\scrape_google_trip.py` for flight/hotel checks).
+2. Kayak second, as comparison/fallback for flights/hotels.
+3. For US destinations, check car rental after flights/hotels; if Kayak cars fail, use Skyscanner, direct rental companies, or other public comparison sources.
+
 ## Scraping Rules For The Local Model
 
 - Default origin is `DFW` unless the intake row has a different `origin`.
 - US city packages should include flight, hotel, and car/activity deals when available.
 - International packages should include flight and hotel deals; skip car rentals unless Boss specifically asks.
 - Cruises should use cruise searches and should not be mixed with city flight/hotel runs.
-- Kayak can be flaky. If route scraping fails or returns empty data, check Google Flights or existing `D:\OpenClaw\CamouFox` scripts before inventing a new scraper.
-- Skyscanner often blocks with CAPTCHA. Avoid it unless there is already a working local script for the exact purpose.
+- Google-first order above applies; Kayak is the fallback/comparison source, not the first try.
+- Kayak can be flaky. If route scraping fails or returns empty data, check existing `D:\OpenClaw\CamouFox` scripts before inventing a new scraper.
+- Skyscanner often blocks with CAPTCHA. Avoid it unless there is already a working local script for the exact purpose; exception: allowed for US car rental when Kayak cars fail.
 - For Kayak pages, wait for JavaScript rendering before deciding there are no results. Empty static HTML does not mean no deals.
 
 Recommended destination order for proactive package refreshes:
@@ -116,6 +125,13 @@ Recommended destination order for proactive package refreshes:
 7. Dublin
 8. Galveston cruise
 9. Miami cruise
+
+## Auto-Refresh Policy (Boss directive, 2026-08-31)
+
+- **Never show sample cards.** The dashboard has no sample fallback. An empty grid means "refresh in progress".
+- **Always auto-refresh.** A daily cron job (`TravelDash Auto-Refresh`, isolated agent) checks `intake_submissions` (pending/processing) and expired/refresh-requested packages, then processes ONE destination per run in the curated order above. The front-end also auto-queues renewals for expired packages when the dashboard is viewed.
+- **Look 1-2 months out.** When refreshing, target travel dates 30-60 days from today (not the old expired dates). If an expired package has dates, shift the trip to a comparable window 1-2 months out unless the intake row says otherwise. Keep `expires_at` at +7 days from creation.
+- Process one destination per run. When done, the grid updates automatically (front-end polls every 60s for up to 15 minutes after auto-refresh is queued).
 
 ## How To Turn Scraper Output Into Cards
 
