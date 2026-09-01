@@ -1,0 +1,5 @@
+url? true key? true
+packages COLS id,title,destination,origin,start_date,end_date,total_price,status,created_at,expires_at,notes,user_created
+deals COLS id,package_id,deal_type,provider,title,description,price,original_price,order_url,booking_details,rating,created_at
+extras COLS id,package_id,category,name,description,estimated_price,suggested_url,purchased,created_at
+DONE

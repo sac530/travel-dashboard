@@ -1,0 +1,6 @@
+EXTRAS INSERT FAILED {
+  code: 'PGRST204',
+  details: null,
+  hint: null,
+  message: "Could not find the 'extra_type' column of 'extras' in the schema cache"
+}

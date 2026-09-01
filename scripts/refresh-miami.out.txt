@@ -1,0 +1,17 @@
+PACKAGE_ID b55acafd-b07b-4b45-8abc-1080bce4a15a
+DEAL_ID a17ddf53-98e9-4b9c-be3a-54232f674ed6 flight 254
+DEAL_ID d9f00525-17eb-49c1-815a-8f633a4e2972 hotel 284
+DEAL_ID c0514b9d-0e56-4ba9-b78a-3222ee0d9dc9 car 212
+MIAMI_PENDING_INTAKE []
+OTHER_MIAAMI_PACKAGES [{"id":"d1a73dfe-454f-4d17-ae38-eafcc7beea95","status":"expired","title":"Miami Beach Weekend","expires_at":"2026-08-13T20:18:22.729+00:00"},{"id":"e85bc105-1b71-47da-a289-3308bda04780","status":"expired","title":"Miami Google Deal Watch — Oct 8–11, 2026","expires_at":"2026-08-29T02:31:38.563+00:00"},{"id":"292d6d57-36f5-44b7-aa4f-5072830a8802","status":"expired","title":"Miami Google Deal Watch — Oct 8–11, 2026","expires_at":"2026-08-29T02:31:44.828+00:00"},{"id":"cbc081d6-1436-45c0-b1fb-51a046a39f44","status":"expired","title":"Miami Google Deal Watch — Oct 8–11, 2026","expires_at":"2026-08-29T02:32:37.562+00:00"},{"id":"75534bea-7fb6-4671-b288-9a57d0ebc0c5","status":"expired","title":"Miami Real Deal Watch - 2026-08-27","expires_at":"2026-08-20T12:48:00.807+00:00"},{"id":"456170f2-f740-448a-a80a-4cfbb8a26c2a","status":"expired","title":"Miami Google Deal Watch - 2026-10-08","expires_at":"2026-08-20T13:31:17.38+00:00"},{"id":"97842c6b-a6ab-4ebe-84a0-19f80b869c91","status":"expired","title":"Miami Google Deal Watch — Oct 8–11, 2026","expires_at":"2026-08-29T02:31:49.888+00:00"},{"id":"1570af6a-8281-4793-bfb8-f178a55add8a","status":"active","title":"Miami Labor Day + Beach Weekend","expires_at":"2026-09-08T04:50:28.999+00:00"},{"id":"05728c8c-c5f2-4346-8af8-fccd206af6f6","status":"active","title":"Miami Labor Day + Beach Weekend","expires_at":"2026-09-08T04:51:01.009+00:00"},{"id":"1451a974-9026-46f4-92a8-82dbfee1cc68","status":"active","title":"Miami Labor Day + Beach Weekend","expires_at":"2026-09-08T04:51:09.954+00:00"}]
+ARCHIVE_OLD_PKG d1a73dfe-454f-4d17-ae38-eafcc7beea95 FAILED new row for relation "packages" violates check constraint "packages_status_check"
+ARCHIVE_OLD_PKG e85bc105-1b71-47da-a289-3308bda04780 FAILED new row for relation "packages" violates check constraint "packages_status_check"
+ARCHIVE_OLD_PKG 292d6d57-36f5-44b7-aa4f-5072830a8802 FAILED new row for relation "packages" violates check constraint "packages_status_check"
+ARCHIVE_OLD_PKG cbc081d6-1436-45c0-b1fb-51a046a39f44 FAILED new row for relation "packages" violates check constraint "packages_status_check"
+ARCHIVE_OLD_PKG 75534bea-7fb6-4671-b288-9a57d0ebc0c5 FAILED new row for relation "packages" violates check constraint "packages_status_check"
+ARCHIVE_OLD_PKG 456170f2-f740-448a-a80a-4cfbb8a26c2a FAILED new row for relation "packages" violates check constraint "packages_status_check"
+ARCHIVE_OLD_PKG 97842c6b-a6ab-4ebe-84a0-19f80b869c91 FAILED new row for relation "packages" violates check constraint "packages_status_check"
+ARCHIVE_OLD_PKG 1570af6a-8281-4793-bfb8-f178a55add8a FAILED new row for relation "packages" violates check constraint "packages_status_check"
+ARCHIVE_OLD_PKG 05728c8c-c5f2-4346-8af8-fccd206af6f6 FAILED new row for relation "packages" violates check constraint "packages_status_check"
+ARCHIVE_OLD_PKG 1451a974-9026-46f4-92a8-82dbfee1cc68 FAILED new row for relation "packages" violates check constraint "packages_status_check"
+DONE package= b55acafd-b07b-4b45-8abc-1080bce4a15a expires_at= 2026-09-08T04:52:41.673Z
